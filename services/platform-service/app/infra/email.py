@@ -9,6 +9,10 @@ RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 
 
 async def send_password_reset_email(to_email: str, reset_url: str) -> None:
+    """Envia o email de recuperacao de senha via API da Resend. Se a chave
+    nao estiver configurada (ex.: ambiente de dev sem conta Resend), so loga
+    o erro e retorna — nao quebra o fluxo de forgot-password (que sempre
+    devolve mensagem generica de sucesso pro frontend de qualquer forma)."""
     if not RESEND_API_KEY:
         logger.error("RESEND_API_KEY nao configurada — email de recuperacao nao enviado")
         return
@@ -31,10 +35,15 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> None:
         )
         resp.raise_for_status()
     except Exception as e:
+        # Falha de envio nunca deve propagar como erro pro usuario que pediu
+        # o reset — so registra pra investigacao manual.
         logger.error(f"Erro ao enviar email de recuperacao de senha: {e}", exc_info=True)
 
 
 async def send_team_invite_email(to_email: str, invite_url: str, tenant_name: str, inviter_name: str | None) -> None:
+    """Envia o email de convite pra entrar num tenant. Mesma logica de
+    tolerancia a falha do send_password_reset_email — nao derruba o fluxo de
+    criar_convite (routers/users.py) se o email nao sair."""
     if not RESEND_API_KEY:
         logger.error("RESEND_API_KEY nao configurada — email de convite nao enviado")
         return

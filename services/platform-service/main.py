@@ -24,6 +24,9 @@ import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Ciclo de vida do app: nada a fazer no startup por enquanto (o cleanup
+    periodico de mensagens antigas e responsabilidade do conversation-service,
+    nao deste). No shutdown, fecha o client HTTP assincrono compartilhado."""
     yield
     await close_async_client()
     logger.info("Recursos de rede finalizados com sucesso")
@@ -34,6 +37,8 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+# strip() em cada origem: "https://a.com, https://b.com" (espaco apos a
+# virgula) fazia a segunda origem nunca casar — falha silenciosa de CORS.
 origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 
 app.add_middleware(
@@ -47,7 +52,15 @@ app.add_middleware(
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
+    """Gera (ou reaproveita, se o caller mandar X-Request-ID — ex.: outro
+    servico repassando o mesmo id) um id por requisicao e injeta em toda
+    linha de log emitida durante o processamento dela. E a peca que permite
+    reconstruir "o que aconteceu com a requisicao X" so lendo o log."""
     token = set_request_id(request.headers.get("x-request-id"))
+    # Guardado tambem em request.state: o handler de excecao para `Exception`
+    # roda numa camada MAIS EXTERNA (por cima deste middleware) — quando uma
+    # excecao nao tratada sobe ate la, o `finally` abaixo ja rodou e resetou
+    # a contextvar. request.state sobrevive a essa subida.
     request.state.request_id = get_request_id()
     try:
         response = await call_next(request)
@@ -59,6 +72,11 @@ async def request_id_middleware(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Rede de seguranca: qualquer excecao que escapou de um endpoint sem
+    try/except explicito passa por aqui antes de virar 500 — sempre com
+    traceback e request_id, nunca um erro silencioso sem rastro. HTTPException
+    tem handler proprio mais especifico no FastAPI e NAO passa por aqui (nao
+    intercepta os 4xx/403/404 esperados)."""
     request_id = getattr(request.state, "request_id", get_request_id())
     logger.error(
         f"Excecao nao tratada em {request.method} {request.url.path} "
@@ -80,4 +98,5 @@ app.include_router(internal_router)
 
 @app.get("/")
 def root():
+    """Health check simples — usado pra confirmar que o processo subiu."""
     return {"status": "online", "service": "platform-service", "version": "0.1.0"}

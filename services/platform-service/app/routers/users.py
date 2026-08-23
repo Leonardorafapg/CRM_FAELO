@@ -1,5 +1,15 @@
 """Gestao de equipe dentro do tenant: listar/convidar/editar usuarios.
-Mesmas regras de permissao do chat-api atual — ver docstrings dos handlers.
+
+Convite por email (mesmo padrao do reset de senha), nao criacao direta com
+senha temporaria — ninguem alem do proprio convidado sabe a senha dele.
+
+Regras de permissao (alem de require_admin no nivel da rota):
+- so owner pode conceder/manter role=owner (admin nao promove a owner nem
+  edita um owner existente);
+- ninguem edita a propria linha (role ou is_active) por aqui — evita
+  autopromocao e autolockout;
+- tenant precisa manter pelo menos 1 owner ativo — bloqueia rebaixar/
+  desativar o ultimo.
 """
 import os
 import re
@@ -23,7 +33,7 @@ from app.auth.routes import _hash_token, EMAIL_REGEX
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-INVITE_TTL_DAYS = 7
+INVITE_TTL_DAYS = 7  # janela de validade do link de convite
 
 
 class InviteCreate(BaseModel):
@@ -39,6 +49,8 @@ class InviteCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    """PATCH parcial: so mexe no campo que vier preenchido (role e/ou
+    is_active), os dois opcionais e independentes um do outro."""
     role:      UserRole | None = None
     is_active: bool | None = None
 
@@ -71,6 +83,8 @@ def listar_usuarios(
     current_user: dict = Depends(require_own_tenant),
     _role: dict = Depends(require_admin),
 ):
+    """Lista todos os membros da equipe do tenant, do mais antigo pro mais
+    recente. Exige admin/owner — attendant nao ve a lista de usuarios."""
     users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.created_at).all()
     return [_serialize_user(u) for u in users]
 
@@ -82,6 +96,9 @@ def listar_convites(
     current_user: dict = Depends(require_own_tenant),
     _role: dict = Depends(require_admin),
 ):
+    """Lista so os convites AINDA PENDENTES (accepted_at is None) — convites
+    ja aceitos ou expirados nao aparecem aqui, viraram User de verdade ou
+    ficaram mortos."""
     invites = (
         db.query(Invite)
         .filter(Invite.tenant_id == tenant_id, Invite.accepted_at.is_(None))
@@ -92,7 +109,7 @@ def listar_convites(
 
 
 @router.post("/{tenant_id}/invite")
-@limiter.limit("20/hour")
+@limiter.limit("20/hour")  # protege contra spam de convites (e de envio de email)
 async def criar_convite(
     request: Request,
     tenant_id: str,
@@ -101,6 +118,10 @@ async def criar_convite(
     current_user: dict = Depends(require_own_tenant),
     _role: dict = Depends(require_admin),
 ):
+    """Cria e envia um convite por email. So um owner pode convidar outro
+    owner (um admin nao pode elevar ninguem ao proprio nivel do dono).
+    Gerar um convite novo pro mesmo email invalida qualquer um anterior
+    ainda pendente, pra nunca existir 2 links validos e divergentes."""
     if body.role == UserRole.owner and current_user.get("role") != UserRole.owner.value:
         raise HTTPException(status_code=403, detail="Só um owner pode convidar outro owner")
 
@@ -147,6 +168,8 @@ def cancelar_convite(
     current_user: dict = Depends(get_current_user),
     _role: dict = Depends(require_admin),
 ):
+    """Cancela um convite pendente antes que seja aceito — apaga a linha de
+    fato (nao e soft delete, convite cancelado nao tem valor historico)."""
     invite = db.query(Invite).filter(Invite.id == invite_id).first()
     if not invite:
         raise HTTPException(status_code=404, detail="Convite não encontrado")
@@ -165,6 +188,9 @@ def editar_usuario(
     current_user: dict = Depends(get_current_user),
     _role: dict = Depends(require_admin),
 ):
+    """Edita role e/ou is_active de um membro da equipe. Concentra as regras
+    de protecao contra abuso de permissao — ver docstring do modulo pra lista
+    completa das regras."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -172,10 +198,16 @@ def editar_usuario(
         raise HTTPException(status_code=403, detail="Acesso negado")
 
     if user.id == current_user.get("user_id"):
+        # Impede autopromocao (virar owner sozinho) e autolockout
+        # (desativar a propria conta e ficar sem acesso).
         raise HTTPException(status_code=400, detail="Você não pode editar sua própria conta por aqui")
 
     is_caller_owner = current_user.get("role") == UserRole.owner.value
 
+    # So um owner mexe em outro owner — nem role nem is_active. Sem isso um
+    # admin poderia desativar todos os owners exceto o ultimo (bloqueado so
+    # pela regra de "ultimo owner", abaixo) e efetivamente assumir controle
+    # do tenant.
     if user.role == UserRole.owner and not is_caller_owner:
         raise HTTPException(status_code=403, detail="Só um owner pode editar outro owner")
 
@@ -183,6 +215,7 @@ def editar_usuario(
         if body.role == UserRole.owner and not is_caller_owner:
             raise HTTPException(status_code=403, detail="Só um owner pode conceder o papel de owner")
         if user.role == UserRole.owner and body.role != UserRole.owner:
+            # Rebaixando um owner — confere que sobra outro owner ativo antes.
             _assert_not_last_owner(db, user)
         user.role = body.role
 
@@ -198,6 +231,9 @@ def editar_usuario(
 
 
 def _assert_not_last_owner(db: Session, user: User) -> None:
+    """Levanta 400 se `user` for o UNICO owner ativo do tenant — chamado
+    antes de rebaixar ou desativar um owner, garante que o tenant nunca fica
+    sem ninguem no nivel mais alto de permissao."""
     other_owners = (
         db.query(User)
         .filter(
