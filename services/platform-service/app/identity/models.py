@@ -14,7 +14,7 @@ class User(Base):
     id                = Column(String, primary_key=True)
     tenant_id         = Column(String, ForeignKey("tenants.id"), nullable=False)
     email             = Column(String, unique=True, nullable=False)  # unico GLOBALMENTE, nao so por tenant
-    hashed_password   = Column(String, nullable=False)                # nunca a senha em texto puro — ver auth/routes.py::_hash_password
+    hashed_password   = Column(String, nullable=False)                # nunca a senha em texto puro — ver auth/security.py::hash_password
     name              = Column(String, nullable=True)
     role              = Column(Enum(UserRole), default=UserRole.owner)  # nivel de permissao dentro do tenant
     is_platform_admin = Column(Boolean, default=False)  # super-admin cross-tenant (equipe da Faelo, nao do cliente)
