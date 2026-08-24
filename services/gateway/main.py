@@ -36,10 +36,20 @@ logger = get_logger("gateway")
 # "/internal/*" de proposito NAO esta nessa tabela — endpoints internos
 # (protegidos por X-Internal-Key) sao chamados servico-a-servico direto,
 # nunca atraves do gateway publico.
+#
+# .rstrip("/"): se a env var vier com barra no final (ex.:
+# "https://host.up.railway.app/"), upstream_url = f"{base}/{path}" geraria
+# "https://host.up.railway.app//auth/login" (barra dupla) — o servico de
+# destino nao reconhece essa rota e devolve 404. Normaliza aqui pra nao
+# depender de ninguem configurar a env var sem barra final.
+def _service_url(env_var: str, default: str) -> str:
+    return os.getenv(env_var, default).rstrip("/")
+
+
 SERVICE_ROUTES: dict[str, str] = {
-    "auth":      os.getenv("PLATFORM_SERVICE_URL", "http://localhost:8001"),
-    "tenants":   os.getenv("PLATFORM_SERVICE_URL", "http://localhost:8001"),
-    "users":     os.getenv("PLATFORM_SERVICE_URL", "http://localhost:8001"),
+    "auth":      _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
+    "tenants":   _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
+    "users":     _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
 }
 
 # Headers que NAO devem ser repassados adiante — sao especificos da conexao
