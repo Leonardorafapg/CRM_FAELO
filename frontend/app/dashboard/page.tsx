@@ -1,4 +1,12 @@
+"use client";
+
+import { useRequireAuth } from "@/hooks/useRequireAuth";
+
 export default function DashboardPage() {
+  const ready = useRequireAuth();
+
+  if (!ready) return null;
+
   return (
     <main className="flex flex-1 items-center justify-center px-4">
       <div className="text-center">
