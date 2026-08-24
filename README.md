@@ -8,6 +8,17 @@ chama só o **gateway**; os serviços internos nunca ficam expostos direto.
 Construção incremental: só existe no código o que já foi pedido e
 construído.
 
+## Documentação
+
+Checklists permanentes que valem pra toda mudança futura, não histórico do
+que foi feito — ver `docs/`:
+
+- `docs/SECURITY.md` — padrões de segurança (senha, tokens, JWT, RBAC, CORS)
+- `docs/PERFORMANCE.md` — N+1, índices, paginação, pool de conexão
+- `docs/TESTING.md` — como e o que testar em cada mudança
+- `docs/LOGGING.md` — níveis de log, correlação entre serviços, mapeamento de erro
+- `docs/DESIGN_SYSTEM.md` — identidade visual e arquitetura de UI alvo do frontend
+
 ## Serviços
 
 | Serviço | Pasta | URL (dev) | Status |
@@ -46,7 +57,7 @@ platform-service.
 
 ## Testes
 
-Ver `TESTING.md` pro padrão geral. Pra rodar a suíte do platform-service
+Ver `docs/TESTING.md` pro padrão geral. Pra rodar a suíte do platform-service
 (precisa de um Postgres em `localhost:5432`, cria o banco de teste na
 primeira vez):
 
