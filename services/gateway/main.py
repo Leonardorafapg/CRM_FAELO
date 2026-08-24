@@ -30,8 +30,9 @@ logger = get_logger("gateway")
 # feito pelo primeiro segmento do path (ver _resolve_upstream), nao por
 # prefixo mais especifico vencendo o mais generico.
 #
-# So platform-service existe ate agora — nenhuma rota de servico que ainda
-# nao foi construido fica aqui (adicionar quando o servico de fato existir).
+# So platform-service e crm-service existem ate agora — nenhuma rota de
+# servico que ainda nao foi construido fica aqui (adicionar quando o
+# servico de fato existir).
 #
 # "/internal/*" de proposito NAO esta nessa tabela — endpoints internos
 # (protegidos por X-Internal-Key) sao chamados servico-a-servico direto,
@@ -50,6 +51,11 @@ SERVICE_ROUTES: dict[str, str] = {
     "auth":      _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
     "tenants":   _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
     "users":     _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
+
+    "pipelines":        _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
+    "stages":           _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
+    "contact-statuses": _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
+    "contacts":         _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
 }
 
 # Headers que NAO devem ser repassados adiante — sao especificos da conexao
