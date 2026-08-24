@@ -26,9 +26,16 @@ que foi feito — ver `docs/`:
 | **gateway** | `services/gateway` | `:8000` | Ponto de entrada público — distribui requisições por prefixo de rota |
 | **platform-service** | `services/platform-service` | `:8001` | Auth, Tenant, User/RBAC, Invites |
 
-`services/shared/` é uma lib Python instalada localmente (`pip install -e ../shared`)
-por cada serviço — não é um serviço, é código compartilhado (verificação de
-JWT, RBAC, base de banco, HTTP client, logging).
+`services/shared/` é uma lib Python instalada via git (`requirements.txt`
+aponta pro subdiretório `services/shared` deste mesmo repositório) por cada
+serviço — não é um serviço, é código compartilhado (verificação de JWT,
+RBAC, base de banco, HTTP client, logging). Instalação via git (não path
+relativo `-e ../shared`) de propósito: cada serviço builda isolado em
+produção (Railway builda `services/gateway` e `services/platform-service`
+cada um sem enxergar a pasta irmã `services/shared`) — um path relativo
+falha nesse cenário. Pra editar `shared/` e testar sem precisar commitar a
+cada mudança, reinstale local com `pip install -e ../shared` por cima
+(sobrescreve so na sua venv).
 
 ## Rodando localmente (gateway + platform-service)
 
