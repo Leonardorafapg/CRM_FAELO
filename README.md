@@ -5,14 +5,15 @@ como microsserviços independentes — cada um é uma API própria, com sua
 própria URL e seu próprio banco. O frontend (e qualquer cliente externo)
 chama só o **gateway**; os serviços internos nunca ficam expostos direto.
 
+Construção incremental: só existe no código o que já foi pedido e
+construído.
+
 ## Serviços
 
 | Serviço | Pasta | URL (dev) | Status |
 |---|---|---|---|
 | **gateway** | `services/gateway` | `:8000` | Ponto de entrada público — distribui requisições por prefixo de rota |
 | **platform-service** | `services/platform-service` | `:8001` | Auth, Tenant, User/RBAC, Invites |
-| **crm-service** | — | `:8002` | Contacts, Pipeline/Stage (planejado) |
-| **conversation-service** | — | `:8003` | Conversas, WhatsApp, IA (planejado) |
 
 `services/shared/` é uma lib Python instalada localmente (`pip install -e ../shared`)
 por cada serviço — não é um serviço, é código compartilhado (verificação de
@@ -39,8 +40,6 @@ cp .env.example .env
 uvicorn main:app --reload --port 8000
 ```
 
-O frontend passa a chamar `http://localhost:8000` (o gateway), não mais cada
-serviço direto. `/auth`, `/tenants`, `/users` já roteiam pro platform-service;
-`/contacts`, `/pipelines`, `/stages` (crm-service) e `/conversations`,
-`/webhooks` (conversation-service) já têm rota reservada no gateway e vão
-funcionar assim que esses serviços forem construídos — até lá devolvem 502.
+O frontend passa a chamar `http://localhost:8000` (o gateway), não mais o
+platform-service direto. `/auth`, `/tenants`, `/users` roteiam pro
+platform-service.

@@ -30,6 +30,9 @@ logger = get_logger("gateway")
 # feito pelo primeiro segmento do path (ver _resolve_upstream), nao por
 # prefixo mais especifico vencendo o mais generico.
 #
+# So platform-service existe ate agora — nenhuma rota de servico que ainda
+# nao foi construido fica aqui (adicionar quando o servico de fato existir).
+#
 # "/internal/*" de proposito NAO esta nessa tabela — endpoints internos
 # (protegidos por X-Internal-Key) sao chamados servico-a-servico direto,
 # nunca atraves do gateway publico.
@@ -37,18 +40,6 @@ SERVICE_ROUTES: dict[str, str] = {
     "auth":      os.getenv("PLATFORM_SERVICE_URL", "http://localhost:8001"),
     "tenants":   os.getenv("PLATFORM_SERVICE_URL", "http://localhost:8001"),
     "users":     os.getenv("PLATFORM_SERVICE_URL", "http://localhost:8001"),
-
-    # Ainda nao construidos (Fase 2/3 do rebuild) — a rota ja existe aqui pra
-    # nao precisar mexer no gateway de novo quando os servicos subirem, mas
-    # vai devolver 502 (upstream indisponivel) ate la.
-    "contacts":         os.getenv("CRM_SERVICE_URL", "http://localhost:8002"),
-    "contact-statuses": os.getenv("CRM_SERVICE_URL", "http://localhost:8002"),
-    "pipelines":        os.getenv("CRM_SERVICE_URL", "http://localhost:8002"),
-    "stages":           os.getenv("CRM_SERVICE_URL", "http://localhost:8002"),
-
-    "conversations": os.getenv("CONVERSATION_SERVICE_URL", "http://localhost:8003"),
-    "connections":   os.getenv("CONVERSATION_SERVICE_URL", "http://localhost:8003"),
-    "webhooks":      os.getenv("CONVERSATION_SERVICE_URL", "http://localhost:8003"),
 }
 
 # Headers que NAO devem ser repassados adiante — sao especificos da conexao
