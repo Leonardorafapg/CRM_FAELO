@@ -1,0 +1,18 @@
+[project]
+name = "shared"
+version = "0.1.0"
+description = "Lib fina compartilhada entre os microsservicos (jwt verify, RBAC, db base, http client, logging)"
+requires-python = ">=3.11"
+dependencies = [
+    "python-jose[cryptography]>=3.5.0",
+    "sqlalchemy>=2.0.50",
+    "httpx>=0.28.1",
+    "fastapi>=0.136.3",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["shared*"]

@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* Paleta clara extraida do mockup de dashboard mandado (fundo creme, cards
+   brancos, azul solido de destaque, texto escuro) — substitui o dark mode
+   como tema das telas atuais (login/register/dashboard). Os tokens antigos
+   de dark mode (faelo-blue/purple/glow, dark-bg/card/border) continuam
+   definidos, só não são mais o default usado no body. */
+:root {
+  --page-bg: #faf6ef;
+  --card-bg: #ffffff;
+  --sidebar-bg: #dceafb;
+  --accent-blue: #2f7bfb;
+  --border-light: #ece7de;
+
+  --text-dark: #1d1b2c;
+  --text-muted: #8b8fa0;
+
+  --faelo-blue: #007bff;
+  --faelo-purple: #8f42c1;
+  --faelo-glow: #d0e1ff;
+
+  --dark-bg: #121214;
+  --dark-card: #1e1e22;
+  --dark-border: #2d2d35;
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+
+  --ai-gradient: linear-gradient(135deg, #007bff 0%, #8f42c1 100%);
+}
+
+@theme inline {
+  --color-page-bg: var(--page-bg);
+  --color-card-bg: var(--card-bg);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-accent-blue: var(--accent-blue);
+  --color-border-light: var(--border-light);
+  --color-text-dark: var(--text-dark);
+  --color-text-muted: var(--text-muted);
+
+  --color-faelo-blue: var(--faelo-blue);
+  --color-faelo-purple: var(--faelo-purple);
+  --color-faelo-glow: var(--faelo-glow);
+  --color-dark-bg: var(--dark-bg);
+  --color-dark-card: var(--dark-card);
+  --color-dark-border: var(--dark-border);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+
+  --font-sans: var(--font-inter);
+  /* Faelo Geometric ainda nao foi recebida (ver DESIGN_SYSTEM.md) — cai no
+     fallback sans-serif do sistema ate o arquivo da fonte chegar. */
+  --font-heading: "Faelo Geometric", var(--font-inter), sans-serif;
+}
+
+body {
+  background: var(--page-bg);
+  color: var(--text-dark);
+}
