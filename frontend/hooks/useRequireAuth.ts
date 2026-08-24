@@ -1,23 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getToken } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * Protege uma página client-side: sem token salvo, redireciona pra /login.
- * `ready` só vira true depois da checagem, pra a página não desenhar
- * conteúdo protegido por um instante antes do redirect.
+ * Protege uma página client-side: sem sessão no AuthContext, redireciona
+ * pra /login. Devolve `ready` só depois que o AuthProvider terminou de ler
+ * o localStorage E confirmou que há usuário — a página não desenha
+ * conteúdo protegido antes disso.
  */
 export function useRequireAuth() {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!getToken()) {
+    if (!isLoading && !user) {
       router.replace("/login");
-      return;
     }
-    setReady(true);
-  }, [router]);
+  }, [isLoading, user, router]);
 
-  return ready;
+  return !isLoading && !!user;
 }

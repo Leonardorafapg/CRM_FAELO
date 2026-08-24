@@ -1,14 +1,31 @@
 import type { AuthResponse } from "./api";
 
-// Guarda so o essencial da sessao no localStorage — sem lib de state
-// management, o escopo atual (login/register) nao precisa disso ainda.
-const TOKEN_KEY = "faelo_token";
+// Guarda a sessao inteira (nao so o token) — o AuthContext precisa dos
+// outros campos (name, role, tenant_id) pra expor o usuario logado sem
+// decodificar o JWT no frontend.
+const SESSION_KEY = "faelo_session";
 
 export function saveSession(auth: AuthResponse) {
-  localStorage.setItem(TOKEN_KEY, auth.access_token);
+  localStorage.setItem(SESSION_KEY, JSON.stringify(auth));
+}
+
+export function loadSession(): AuthResponse | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthResponse;
+  } catch {
+    // Sessao salva corrompida (formato antigo, JSON invalido) — trata como
+    // deslogado em vez de quebrar a aplicacao.
+    return null;
+  }
+}
+
+export function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
 }
 
 export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return loadSession()?.access_token ?? null;
 }

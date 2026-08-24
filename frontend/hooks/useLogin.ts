@@ -1,11 +1,12 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { login, ApiError } from "@/lib/api";
-import { saveSession } from "@/lib/auth";
+import { login as loginRequest, ApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 /** Estado e submit do formulário de login — a página só monta a UI. */
 export function useLogin() {
   const router = useRouter();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -16,8 +17,8 @@ export function useLogin() {
     setError(null);
     setLoading(true);
     try {
-      const auth = await login(email, password);
-      saveSession(auth);
+      const auth = await loginRequest(email, password);
+      login(auth);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao entrar.");
