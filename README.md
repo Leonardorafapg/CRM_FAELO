@@ -43,3 +43,16 @@ uvicorn main:app --reload --port 8000
 O frontend passa a chamar `http://localhost:8000` (o gateway), não mais o
 platform-service direto. `/auth`, `/tenants`, `/users` roteiam pro
 platform-service.
+
+## Testes
+
+Ver `TESTING.md` pro padrão geral. Pra rodar a suíte do platform-service
+(precisa de um Postgres em `localhost:5432`, cria o banco de teste na
+primeira vez):
+
+```bash
+cd services/platform-service
+pip install -r requirements-dev.txt
+python -c "import psycopg2; c=psycopg2.connect(host='localhost',port=5432,user='postgres',password='SUA_SENHA',dbname='postgres',client_encoding='utf8'); c.autocommit=True; c.cursor().execute('CREATE DATABASE crm_faelo_platform_test')"
+pytest
+```
