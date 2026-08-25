@@ -16,6 +16,18 @@ logger = get_logger("whatsapp-service")
 EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "").rstrip("/")
 EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "")
 
+# Timeout curto pras chamadas "de enriquecimento" (status/historico/foto),
+# feitas dentro de GET /connections e GET /sessoes — o client HTTP
+# compartilhado (shared/http_client.py) usa 30s de default, mas isso e
+# tempo demais pra algo que roda dentro de um endpoint de LISTAGEM: o
+# gateway usa o mesmo client (mesmos 30s) pra chamar este servico, entao um
+# unico GET /connections lento o suficiente derruba a propria requisicao do
+# gateway com ReadTimeout (502) antes mesmo da Evolution responder. Essas
+# chamadas ja sao best-effort (falha vira "sem esse dado", nunca 500) — um
+# timeout curto so faz a degradacao acontecer rapido em vez de travar a tela
+# inteira por 30s quando a Evolution esta fora do ar/lenta.
+_ENRICHMENT_TIMEOUT = 5.0
+
 
 def _headers() -> dict:
     return {"apikey": EVOLUTION_API_KEY, "Content-Type": "application/json"}
@@ -58,6 +70,7 @@ async def get_instance_status(instance_name: str) -> dict:
         resp = await client.get(
             f"{EVOLUTION_API_URL}/instance/connectionState/{instance_name}",
             headers=_headers(),
+            timeout=_ENRICHMENT_TIMEOUT,
         )
         resp.raise_for_status()
         return resp.json()
@@ -149,6 +162,7 @@ async def find_chats(instance_name: str) -> list[dict]:
             f"{EVOLUTION_API_URL}/chat/findChats/{instance_name}",
             headers=_headers(),
             json={},
+            timeout=_ENRICHMENT_TIMEOUT,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -189,6 +203,7 @@ async def find_messages(instance_name: str, remote_jid: str, limit: int = 100, m
                 f"{EVOLUTION_API_URL}/chat/findMessages/{instance_name}",
                 headers=_headers(),
                 json={"where": {"key": {"remoteJid": remote_jid}}, "limit": limit, "page": page},
+                timeout=_ENRICHMENT_TIMEOUT,
             )
             resp.raise_for_status()
             batch = _unwrap_messages_page(resp.json())
@@ -240,6 +255,7 @@ async def fetch_profile_picture_url(instance_name: str, phone: str) -> str | Non
             f"{EVOLUTION_API_URL}/chat/fetchProfilePictureUrl/{instance_name}",
             headers=_headers(),
             json={"number": phone},
+            timeout=_ENRICHMENT_TIMEOUT,
         )
         resp.raise_for_status()
         data = resp.json()

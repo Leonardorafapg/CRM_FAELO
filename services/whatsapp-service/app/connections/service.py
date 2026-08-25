@@ -2,6 +2,7 @@
 app.evolution.client — aqui so orquestra + persiste. Tudo escopado por
 tenant_id vindo do JWT."""
 import os
+import time
 import uuid
 
 from fastapi import HTTPException
@@ -19,6 +20,17 @@ logger = get_logger("whatsapp-service")
 # (platform-service) consultado aqui.
 MAX_CONNECTIONS_PER_TENANT = 1
 
+# Cooldown do reimport de historico (ver list_connections abaixo): sem isso,
+# import_history (que varre ate 200 chats x ate 5 paginas de mensagens cada)
+# rodava por INTEIRO a cada carregamento/poll da tela de Conexoes — rapido
+# logo depois de conectar (pouco historico), mas ficava cada vez mais lento
+# conforme a conta acumulava conversas reais, ate estourar o timeout do
+# proprio gateway pra este servico (502). Cache em memoria simples (mesmo
+# espirito do _foto_cache em evolution/client.py): no maximo 1 reimport
+# completo por conexao a cada 60s, nao a cada request.
+_last_resync: dict[str, float] = {}
+_RESYNC_COOLDOWN_SECONDS = 60
+
 
 def _new_id() -> str:
     return str(uuid.uuid4())
@@ -27,15 +39,19 @@ def _new_id() -> str:
 async def list_connections(tenant_id: str, db: DbSession) -> list[Connection]:
     """Toda chamada (ou seja, todo carregamento da tela de Conexoes/login)
     reconcilia com a Evolution: conexoes ainda nao conectadas tem o status
-    atualizado, e conexoes ja conectadas tem o historico reimportado — sem
-    isso o usuario so pegava o historico uma vez, na transicao inicial pra
+    atualizado, e conexoes ja conectadas tem o historico reimportado (no
+    maximo 1x a cada _RESYNC_COOLDOWN_SECONDS, ver acima) — sem isso o
+    usuario so pegava o historico uma vez, na transicao inicial pra
     "connected", e ficava sem jeito de puxar mensagens novas trocadas fora
     do app (ex.: direto no celular) sem excluir e recriar a conexao."""
     connections = db.query(Connection).filter(Connection.tenant_id == tenant_id).order_by(Connection.created_at).all()
     for connection in connections:
         if connection.status == "connected":
-            from app.chat.service import import_history
-            await import_history(connection, db)
+            last = _last_resync.get(connection.id, 0.0)
+            if time.monotonic() - last >= _RESYNC_COOLDOWN_SECONDS:
+                from app.chat.service import import_history
+                await import_history(connection, db)
+                _last_resync[connection.id] = time.monotonic()
         else:
             await _refresh_status_from_evolution(connection, db)
     return connections
@@ -124,6 +140,7 @@ async def delete_connection(connection_id: str, tenant_id: str, db: DbSession) -
     await evolution_client.delete_instance(connection.instance_name)
     db.delete(connection)
     db.commit()
+    _last_resync.pop(connection_id, None)
     logger.info(f"Conexao removida: tenant={tenant_id} instance={connection.instance_name}")
 
 

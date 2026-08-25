@@ -182,12 +182,16 @@ def test_list_connections_ja_conectada_nao_chama_get_instance_status(client, db)
     status_mock.assert_not_awaited()
 
 
-def test_list_connections_reimporta_historico_a_cada_chamada_sem_duplicar(client, db):
-    """"Toda vez ao logar precisa puxar o historico" — cada GET /connections
-    de uma conexao ja conectada reimporta (nao so na primeira transicao).
-    Mensagem repetida na segunda chamada nao duplica (dedup por
-    evolution_message_id) e nao bumpa last_activity da sessao sem mensagem
-    nova de verdade (ver _get_or_create_session_quiet)."""
+def test_list_connections_nao_reimporta_historico_dentro_do_cooldown(client, db):
+    """Reimportar o historico INTEIRO (findChats + ate 5 paginas de
+    findMessages por chat) a cada GET /connections nao escala: rapido logo
+    apos conectar (pouco historico), mas cada vez mais lento conforme a
+    conta acumula conversas reais, ate estourar o timeout do gateway pra
+    este servico (ver connections/service.py::_RESYNC_COOLDOWN_SECONDS).
+    Duas chamadas em sequencia (sem o cooldown passar) so reimportam uma
+    vez — a segunda usa o que ja esta no banco, sem chamar a Evolution de
+    novo. Dedup por evolution_message_id continua garantido pra quando o
+    cooldown de fato passar e reimportar de novo."""
     tenant_id = str(uuid.uuid4())
     conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-ok", status="connected")
     db.add(conn)
@@ -203,18 +207,48 @@ def test_list_connections_reimporta_historico_a_cada_chamada_sem_duplicar(client
         client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
         first = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
 
-        # "loga de novo" -- segunda chamada, mesma mensagem no historico
+        # "recarrega a tela" logo em seguida, ainda dentro do cooldown
         client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
         second = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
 
-    assert chats_mock.await_count == 2  # reimportou nas duas chamadas
+    assert chats_mock.await_count == 1  # segunda chamada nao reimportou (dentro do cooldown)
     assert len(second) == 1
-    assert first[0]["last_activity"] == second[0]["last_activity"]  # sem mensagem nova, nao pulou no inbox
+    assert first[0]["last_activity"] == second[0]["last_activity"]
 
     mensagens = client.get(
         f"/chat/{second[0]['id']}/mensagens?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)
     ).json()
-    assert len(mensagens) == 1  # nao duplicou
+    assert len(mensagens) == 1
+
+
+def test_list_connections_reimporta_apos_cooldown_sem_duplicar(client, db):
+    """Depois que o cooldown passa, reimporta de novo — mensagem repetida no
+    historico nao duplica (dedup por evolution_message_id)."""
+    import app.connections.service as connections_service
+
+    tenant_id = str(uuid.uuid4())
+    conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-ok", status="connected")
+    db.add(conn)
+    db.commit()
+
+    chats_mock = AsyncMock(return_value=[{"remoteJid": "5511999999999@s.whatsapp.net", "pushName": "Cliente Teste"}])
+    messages_mock = AsyncMock(return_value=[
+        {"key": {"id": "MSG1", "remoteJid": "5511999999999@s.whatsapp.net", "fromMe": False},
+         "message": {"conversation": "Oi, tudo bem?"}},
+    ])
+
+    with patch("app.evolution.client.find_chats", chats_mock), patch("app.evolution.client.find_messages", messages_mock):
+        client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+
+        connections_service._last_resync.pop(conn.id, None)  # simula o cooldown ja tendo passado
+        client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+        sessoes = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
+
+    assert chats_mock.await_count == 2
+    mensagens = client.get(
+        f"/chat/{sessoes[0]['id']}/mensagens?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)
+    ).json()
+    assert len(mensagens) == 1  # nao duplicou mesmo reimportando de novo
 
 
 def test_admin_can_delete_connection(client, db):
