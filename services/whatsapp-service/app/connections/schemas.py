@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
@@ -7,6 +8,7 @@ class ConnectionOut(BaseModel):
     instance_name: str
     phone: Optional[str] = None
     status: str
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -36,6 +36,41 @@ def test_attendant_cannot_create_connection(client, db):
     assert resp.status_code == 403
 
 
+def test_criar_segunda_conexao_do_mesmo_tenant_retorna_400(client, db):
+    """Limite fixo de 1 conexao por tenant nesta fase (ver
+    MAX_CONNECTIONS_PER_TENANT em app/connections/service.py)."""
+    tenant_id = str(uuid.uuid4())
+    create_mock, webhook_mock, _ = _create_connection_mocks()
+
+    with patch("app.connections.service.evolution_client.create_instance", create_mock), \
+         patch("app.connections.service.evolution_client.set_webhook", webhook_mock):
+        resp1 = client.post("/connections", headers=auth_headers(tenant_id, UserRole.admin))
+        resp2 = client.post("/connections", headers=auth_headers(tenant_id, UserRole.admin))
+
+    assert resp1.status_code == 200
+    assert resp2.status_code == 400
+    create_mock.assert_awaited_once()  # segunda tentativa nao chega a chamar a Evolution
+
+
+def test_criar_conexao_apos_excluir_a_unica_existente_funciona(client, db):
+    tenant_id = str(uuid.uuid4())
+    create_mock, webhook_mock, delete_mock = _create_connection_mocks()
+
+    with patch("app.connections.service.evolution_client.create_instance", create_mock), \
+         patch("app.connections.service.evolution_client.set_webhook", webhook_mock):
+        resp1 = client.post("/connections", headers=auth_headers(tenant_id, UserRole.admin))
+    conn_id = resp1.json()["connection"]["id"]
+
+    with patch("app.connections.service.evolution_client.delete_instance", delete_mock):
+        resp_del = client.delete(f"/connections/{conn_id}", headers=auth_headers(tenant_id, UserRole.admin))
+    assert resp_del.status_code == 200
+
+    with patch("app.connections.service.evolution_client.create_instance", create_mock), \
+         patch("app.connections.service.evolution_client.set_webhook", webhook_mock):
+        resp2 = client.post("/connections", headers=auth_headers(tenant_id, UserRole.admin))
+    assert resp2.status_code == 200
+
+
 def test_list_connections_scoped_by_tenant(client, db):
     tenant_a = str(uuid.uuid4())
     tenant_b = str(uuid.uuid4())

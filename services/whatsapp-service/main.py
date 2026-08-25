@@ -35,7 +35,13 @@ def run_migrations() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    run_migrations()
+    # Testes criam um TestClient novo por teste (ver conftest.py de cada
+    # servico), disparando este lifespan repetidas vezes contra um banco cujo
+    # schema a fixture _schema ja criou via Base.metadata.create_all -- rodar
+    # alembic tambem ali colidiria ("relation already exists"). PYTEST_CURRENT_TEST
+    # e setada automaticamente pelo pytest durante a execucao dos testes.
+    if not os.getenv("PYTEST_CURRENT_TEST"):
+        run_migrations()
     yield
     await close_async_client()
     logger.info("Recursos de rede finalizados com sucesso")

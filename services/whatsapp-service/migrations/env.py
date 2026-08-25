@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-load_dotenv(override=True)  # precisa rodar antes de importar app.db (le DATABASE_URL no import)
+load_dotenv()  # nao usa override=True: main.py ja carregou .env antes de chamar run_migrations() (ver main.py), e em testes o conftest.py seta os env vars manualmente antes -- override=True aqui sobrescrevia esses valores toda vez que a migration rodava no boot, quebrando a suite
 
 from app.db import Base
 # Todo modulo que define tabela precisa ser importado aqui — e o ato de

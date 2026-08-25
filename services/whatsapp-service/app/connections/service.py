@@ -13,6 +13,12 @@ from shared.logging_config import get_logger
 
 logger = get_logger("whatsapp-service")
 
+# Limite fixo por tenant nesta fase — sem plano/config por tenant ainda, so
+# um numero fixo pra todo mundo (ver conversa que definiu isso). Se virar
+# variavel por plano no futuro, isso migra pra um campo em Tenant
+# (platform-service) consultado aqui.
+MAX_CONNECTIONS_PER_TENANT = 1
+
 
 def _new_id() -> str:
     return str(uuid.uuid4())
@@ -40,6 +46,13 @@ def _extract_qrcode(evolution_payload: dict) -> str | None:
 
 
 async def create_connection(tenant_id: str, db: DbSession, webhook_base_url: str) -> tuple[Connection, str | None]:
+    existing = db.query(Connection).filter(Connection.tenant_id == tenant_id).count()
+    if existing >= MAX_CONNECTIONS_PER_TENANT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Limite de {MAX_CONNECTIONS_PER_TENANT} conexão(ões) por conta atingido. Exclua uma conexão existente antes de criar outra.",
+        )
+
     instance_name = f"tenant-{tenant_id}-{uuid.uuid4().hex[:8]}"
 
     evolution_payload = await evolution_client.create_instance(instance_name)
