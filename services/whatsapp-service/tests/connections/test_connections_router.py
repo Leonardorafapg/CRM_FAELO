@@ -125,6 +125,44 @@ def test_list_connections_atualiza_status_para_connected_e_importa_historico(cli
     assert mensagens[0]["content"] == "Oi, tudo bem?"
 
 
+def test_import_historico_nao_descarta_mensagem_de_midia(client, db):
+    """Bug real: mensagem de midia (imagem/audio/etc.) nao tem "conversation"
+    nem "extendedTextMessage" -- content ficava "" e a importacao descartava
+    a mensagem inteira em silencio (ver evolution.client.extract_message_fields
+    e chat.service.import_history)."""
+    tenant_id = str(uuid.uuid4())
+    conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-connecting", status="connecting")
+    db.add(conn)
+    db.commit()
+
+    status_mock = AsyncMock(return_value={"instance": {"state": "open"}})
+    chats_mock = AsyncMock(return_value=[{"remoteJid": "5511999999999@s.whatsapp.net", "pushName": "Cliente Teste"}])
+    messages_mock = AsyncMock(return_value=[
+        {"key": {"id": "MSG-TEXTO", "remoteJid": "5511999999999@s.whatsapp.net", "fromMe": False},
+         "message": {"conversation": "Oi"}},
+        {"key": {"id": "MSG-FOTO", "remoteJid": "5511999999999@s.whatsapp.net", "fromMe": False},
+         "message": {"imageMessage": {"caption": "Segue o comprovante"}}},
+        {"key": {"id": "MSG-AUDIO", "remoteJid": "5511999999999@s.whatsapp.net", "fromMe": True},
+         "message": {"audioMessage": {}}},
+    ])
+
+    with patch("app.connections.service.evolution_client.get_instance_status", status_mock), \
+         patch("app.evolution.client.find_chats", chats_mock), \
+         patch("app.evolution.client.find_messages", messages_mock):
+        client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+
+    sessoes = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
+    mensagens = client.get(
+        f"/chat/{sessoes[0]['id']}/mensagens?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)
+    ).json()
+
+    assert len(mensagens) == 3  # antes do fix, so a de texto sobrevivia
+    contents = {m["content"] for m in mensagens}
+    assert "Oi" in contents
+    assert "[Imagem] Segue o comprovante" in contents
+    assert "[Áudio]" in contents
+
+
 def test_list_connections_ja_conectada_nao_chama_get_instance_status(client, db):
     """Conexao ja "connected" nao precisa consultar o estado de novo (nao
     muda), mas ainda reimporta o historico a cada listagem (ver teste

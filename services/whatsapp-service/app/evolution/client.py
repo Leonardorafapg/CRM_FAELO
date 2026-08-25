@@ -76,11 +76,30 @@ def extract_state(payload: dict) -> str:
     return (instance.get("state") or "").lower()
 
 
+# Mensagem de midia (imagem/audio/video/documento/figurinha/etc.) nao tem
+# "conversation"/"extendedTextMessage" — sem isso, content ficava "" e a
+# importacao de historico (que filtra por `not content`) descartava a
+# mensagem inteira em silencio. Rotula pelo tipo em vez de tentar baixar o
+# conteudo (fora de escopo — ver docs/features/WHATSAPP_SERVICE.md).
+_MEDIA_LABELS = {
+    "imageMessage": "[Imagem]",
+    "videoMessage": "[Vídeo]",
+    "audioMessage": "[Áudio]",
+    "documentMessage": "[Documento]",
+    "stickerMessage": "[Figurinha]",
+    "contactMessage": "[Contato]",
+    "locationMessage": "[Localização]",
+}
+
+
 def extract_message_fields(data: dict) -> dict:
     """Extrai os campos de uma mensagem a partir do shape "data" da Evolution
     (usado tanto no payload do webhook quanto nos registros devolvidos por
     find_messages — mesmo formato de mensagem nos dois casos). Tolerante:
-    campos ausentes viram string/None em vez de KeyError."""
+    campos ausentes viram string/None em vez de KeyError. content nunca
+    fica vazio pra mensagem de verdade (com key.id) — midia sem texto vira
+    um rotulo, tipo desconhecido vira um placeholder generico — pra nenhuma
+    mensagem sumir so por nao ser texto puro."""
     key = data.get("key", {}) if isinstance(data, dict) else {}
     message = data.get("message", {}) if isinstance(data, dict) else {}
 
@@ -93,6 +112,8 @@ def extract_message_fields(data: dict) -> dict:
         or data.get("text")
         or ""
     )
+    if not content and message_id:
+        content = _extract_media_label(message) or "[Mensagem não suportada]"
     contact_name = data.get("pushName")
 
     return {
@@ -102,6 +123,19 @@ def extract_message_fields(data: dict) -> dict:
         "content": content,
         "contact_name": contact_name,
     }
+
+
+def _extract_media_label(message: dict) -> str | None:
+    for msg_type, label in _MEDIA_LABELS.items():
+        # Checa presenca da chave, nao truthiness: audioMessage sem legenda
+        # costuma vir como {} (dict vazio, falsy em Python) — `if not media`
+        # tratava isso como "sem midia" e caia no fallback generico.
+        if msg_type not in message:
+            continue
+        media = message[msg_type]
+        caption = media.get("caption") if isinstance(media, dict) else None
+        return f"{label} {caption}".strip() if caption else label
+    return None
 
 
 async def find_chats(instance_name: str) -> list[dict]:
@@ -126,22 +160,7 @@ async def find_chats(instance_name: str) -> list[dict]:
     return data.get("chats", []) if isinstance(data, dict) else []
 
 
-async def find_messages(instance_name: str, remote_jid: str, limit: int = 50) -> list[dict]:
-    """Mensagens de UM chat especifico — usado junto com find_chats na
-    importacao de historico. Mesmo tratamento best-effort: falha vira lista
-    vazia, nunca excecao propagada."""
-    client = get_async_client()
-    try:
-        resp = await client.post(
-            f"{EVOLUTION_API_URL}/chat/findMessages/{instance_name}",
-            headers=_headers(),
-            json={"where": {"key": {"remoteJid": remote_jid}}, "limit": limit},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Falha ao listar mensagens do chat {remote_jid} na instancia {instance_name}: {type(e).__name__}: {e}", exc_info=True)
-        return []
+def _unwrap_messages_page(data) -> list[dict]:
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
@@ -150,6 +169,40 @@ async def find_messages(instance_name: str, remote_jid: str, limit: int = 50) ->
             return messages.get("records", [])
         return messages
     return []
+
+
+async def find_messages(instance_name: str, remote_jid: str, limit: int = 100, max_pages: int = 5) -> list[dict]:
+    """Mensagens de UM chat especifico — usado junto com find_chats na
+    importacao de historico. Pagina ate max_pages: a Evolution pode limitar
+    quantos registros devolve por chamada mesmo pedindo um "limit" maior, e
+    so uma pagina truncava o historico de chats mais movimentados. Se a API
+    ignorar o parametro "page" e sempre devolver a mesma pagina, o dedup por
+    evolution_message_id no chamador absorve a repeticao sem duplicar —
+    max_pages so limita o desperdicio de chamadas nesse caso. Mesmo
+    tratamento best-effort: falha vira o que ja foi acumulado ate ali, nunca
+    excecao propagada."""
+    client = get_async_client()
+    all_messages: list[dict] = []
+    for page in range(1, max_pages + 1):
+        try:
+            resp = await client.post(
+                f"{EVOLUTION_API_URL}/chat/findMessages/{instance_name}",
+                headers=_headers(),
+                json={"where": {"key": {"remoteJid": remote_jid}}, "limit": limit, "page": page},
+            )
+            resp.raise_for_status()
+            batch = _unwrap_messages_page(resp.json())
+        except httpx.HTTPError as e:
+            logger.error(f"Falha ao listar mensagens do chat {remote_jid} na instancia {instance_name}: {type(e).__name__}: {e}", exc_info=True)
+            break
+
+        if not batch:
+            break
+        all_messages.extend(batch)
+        if len(batch) < limit:
+            break  # ultima pagina — Evolution devolveu menos que o pedido
+
+    return all_messages
 
 
 async def send_message(instance_name: str, phone: str, text: str) -> dict:

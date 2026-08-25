@@ -194,7 +194,7 @@ async def responder(session_id: str, tenant_id: str, content: str, db: DbSession
     return message
 
 
-async def import_history(connection: Connection, db: DbSession, chats_limit: int = 50, messages_per_chat: int = 50) -> None:
+async def import_history(connection: Connection, db: DbSession, chats_limit: int = 200, messages_per_chat: int = 100) -> None:
     """Puxa as conversas e mensagens que ja existiam no WhatsApp antes de
     conectar — sem isso, o inbox comeca vazio mesmo que o numero ja tivesse
     historico. Chamado uma vez, no exato momento em que a Connection
@@ -228,8 +228,10 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
         new_in_chat = 0
         for raw in messages:
             fields = evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
-            if not fields["message_id"] or not fields["content"]:
-                continue
+            if not fields["message_id"]:
+                continue  # nao e uma mensagem de verdade (ex.: evento sem key.id) — content nunca fica
+                          # vazio quando message_id existe (ver extract_message_fields), entao so isso
+                          # ja cobre "descartar mensagem de midia" que existia aqui antes
             existing = db.query(Message).filter(Message.evolution_message_id == fields["message_id"]).first()
             if existing:
                 continue
