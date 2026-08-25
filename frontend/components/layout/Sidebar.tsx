@@ -60,7 +60,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`flex shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar-bg px-3 py-4 text-[13px] transition-[width] duration-150 ${
+      className={`flex shrink-0 flex-col gap-4 overflow-y-auto border-r border-sidebar-border bg-sidebar-bg px-3 py-4 text-[13px] transition-[width] duration-150 ${
         collapsed ? "w-16" : "w-52"
       }`}
     >
