@@ -21,12 +21,29 @@ from app.routers.internal import router as internal_router
 from shared.http_client import close_async_client
 import os
 
+from alembic.config import Config
+from alembic import command
+
+
+def run_migrations() -> None:
+    """Roda `alembic upgrade head` via API do Python no boot do processo, em
+    vez de depender do Procfile/Pre-Deploy Command da plataforma de deploy
+    (Railway) rodar isso por fora — visto na pratica que essa etapa por fora
+    pode silenciosamente nao executar dependendo de como o builder trata o
+    Procfile. Caminho do alembic.ini resolvido a partir deste arquivo (nao do
+    cwd), pra funcionar independente de onde o processo foi iniciado."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    cfg = Config(os.path.join(base_dir, "alembic.ini"))
+    command.upgrade(cfg, "head")
+    logger.info("Migrations aplicadas (alembic upgrade head)")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ciclo de vida do app: nada a fazer no startup por enquanto (o cleanup
-    periodico de mensagens antigas e responsabilidade do conversation-service,
-    nao deste). No shutdown, fecha o client HTTP assincrono compartilhado."""
+    """No startup, garante que o schema do banco esta atualizado antes de
+    aceitar qualquer requisicao. No shutdown, fecha o client HTTP assincrono
+    compartilhado."""
+    run_migrations()
     yield
     await close_async_client()
     logger.info("Recursos de rede finalizados com sucesso")

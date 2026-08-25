@@ -16,9 +16,26 @@ from app.routers.ws import router as ws_router
 from shared.http_client import close_async_client
 import os
 
+from alembic.config import Config
+from alembic import command
+
+
+def run_migrations() -> None:
+    """Roda `alembic upgrade head` via API do Python no boot do processo, em
+    vez de depender do Procfile/Pre-Deploy Command da plataforma de deploy
+    (Railway) rodar isso por fora — visto na pratica que essa etapa por fora
+    pode silenciosamente nao executar dependendo de como o builder trata o
+    Procfile. Caminho do alembic.ini resolvido a partir deste arquivo (nao do
+    cwd), pra funcionar independente de onde o processo foi iniciado."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    cfg = Config(os.path.join(base_dir, "alembic.ini"))
+    command.upgrade(cfg, "head")
+    logger.info("Migrations aplicadas (alembic upgrade head)")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    run_migrations()
     yield
     await close_async_client()
     logger.info("Recursos de rede finalizados com sucesso")
