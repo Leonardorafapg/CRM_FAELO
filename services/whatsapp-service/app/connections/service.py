@@ -1,0 +1,82 @@
+"""Regras de negocio de Connection. Chamadas a Evolution API ficam em
+app.evolution.client — aqui so orquestra + persiste. Tudo escopado por
+tenant_id vindo do JWT."""
+import os
+import uuid
+
+from fastapi import HTTPException
+from sqlalchemy.orm import Session as DbSession
+
+from app.connections.models import Connection
+from app.evolution import client as evolution_client
+from shared.logging_config import get_logger
+
+logger = get_logger("whatsapp-service")
+
+
+def _new_id() -> str:
+    return str(uuid.uuid4())
+
+
+def list_connections(tenant_id: str, db: DbSession) -> list[Connection]:
+    return db.query(Connection).filter(Connection.tenant_id == tenant_id).order_by(Connection.created_at).all()
+
+
+def get_connection_or_404(connection_id: str, tenant_id: str, db: DbSession) -> Connection:
+    conn = db.query(Connection).filter(Connection.id == connection_id, Connection.tenant_id == tenant_id).first()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Conexao não encontrada")
+    return conn
+
+
+def _extract_qrcode(evolution_payload: dict) -> str | None:
+    """O shape exato do QR code na resposta varia entre versoes da Evolution
+    API (qrcode.base64, base64, code) — tenta os formatos mais comuns em vez
+    de travar em um so."""
+    qrcode = evolution_payload.get("qrcode") or {}
+    if isinstance(qrcode, dict):
+        return qrcode.get("base64") or qrcode.get("code")
+    return evolution_payload.get("base64")
+
+
+async def create_connection(tenant_id: str, db: DbSession, webhook_base_url: str) -> tuple[Connection, str | None]:
+    instance_name = f"tenant-{tenant_id}-{uuid.uuid4().hex[:8]}"
+
+    evolution_payload = await evolution_client.create_instance(instance_name)
+    qrcode_base64 = _extract_qrcode(evolution_payload)
+
+    connection = Connection(
+        id=_new_id(),
+        tenant_id=tenant_id,
+        instance_name=instance_name,
+        status="connecting",
+    )
+    db.add(connection)
+    db.commit()
+    db.refresh(connection)
+
+    await evolution_client.set_webhook(instance_name, f"{webhook_base_url}/webhook/evolution")
+
+    logger.info(f"Conexao criada: tenant={tenant_id} instance={instance_name}")
+    return connection, qrcode_base64
+
+
+async def delete_connection(connection_id: str, tenant_id: str, db: DbSession) -> None:
+    connection = get_connection_or_404(connection_id, tenant_id, db)
+    await evolution_client.delete_instance(connection.instance_name)
+    db.delete(connection)
+    db.commit()
+    logger.info(f"Conexao removida: tenant={tenant_id} instance={connection.instance_name}")
+
+
+def get_connection_by_instance(instance_name: str, db: DbSession) -> Connection | None:
+    return db.query(Connection).filter(Connection.instance_name == instance_name).first()
+
+
+def update_status(connection: Connection, status: str, phone: str | None, db: DbSession) -> Connection:
+    connection.status = status
+    if phone:
+        connection.phone = phone
+    db.commit()
+    db.refresh(connection)
+    return connection

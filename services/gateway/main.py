@@ -56,6 +56,15 @@ SERVICE_ROUTES: dict[str, str] = {
     "stages":           _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
     "contact-statuses": _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
     "contacts":         _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
+
+    # whatsapp-service: so rotas HTTP. O WS /ws/{tenant_id} NAO passa por
+    # aqui — o proxy abaixo e HTTP puro (@app.api_route), nao suporta
+    # WebSocket. O frontend conecta o WS diretamente na URL do
+    # whatsapp-service (NEXT_PUBLIC_WHATSAPP_WS_URL), nao pelo gateway.
+    "connections": _service_url("WHATSAPP_SERVICE_URL", "http://localhost:8003"),
+    "webhook":     _service_url("WHATSAPP_SERVICE_URL", "http://localhost:8003"),
+    "sessoes":     _service_url("WHATSAPP_SERVICE_URL", "http://localhost:8003"),
+    "chat":        _service_url("WHATSAPP_SERVICE_URL", "http://localhost:8003"),
 }
 
 # Headers que NAO devem ser repassados adiante — sao especificos da conexao
