@@ -61,10 +61,10 @@
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
 
-  --font-sans: var(--font-inter);
-  /* Faelo Geometric ainda nao foi recebida (ver DESIGN_SYSTEM.md) — cai no
-     fallback sans-serif do sistema ate o arquivo da fonte chegar. */
-  --font-heading: "Faelo Geometric", var(--font-inter), sans-serif;
+  --font-sans: var(--font-app);
+  /* Faelo Geometric ainda nao foi recebida (ver DESIGN_SYSTEM.md) — cai na
+     fonte do app (Plus Jakarta Sans) ate o arquivo da fonte chegar. */
+  --font-heading: "Faelo Geometric", var(--font-app), sans-serif;
 }
 
 body {
