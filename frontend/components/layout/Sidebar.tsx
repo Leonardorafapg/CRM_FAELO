@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +14,7 @@ import {
   IconSun,
   IconMoon,
   IconLogout,
+  IconChevronLeft,
 } from "@/components/layout/icons";
 
 /** So as rotas que de fato existem hoje — nada de item de menu apontando
@@ -25,66 +27,112 @@ const NAV_ITEMS = [
   { href: "/dashboard/atendimentos", label: "Atendimentos", Icon: IconChat },
 ];
 
+const COLLAPSED_KEY = "faelo_sidebar_collapsed";
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
 
   function handleLogout() {
     logout();
     router.push("/login");
   }
 
+  const itemClass = (active: boolean) =>
+    `flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 transition-colors ${
+      collapsed ? "justify-center" : ""
+    } ${
+      active
+        ? "bg-sidebar-active-bg font-medium text-sidebar-fg"
+        : "text-sidebar-fg-muted hover:bg-sidebar-hover-bg hover:text-sidebar-fg"
+    }`;
+
   return (
-    <aside className="flex w-64 shrink-0 flex-col gap-5 border-r border-border-light bg-sidebar-bg px-4 py-5">
-      <div className="px-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-accent-blue">Faelo CRM</p>
-        <span className="font-heading text-lg font-bold text-text-dark">FAELO</span>
+    <aside
+      className={`flex shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar-bg px-3 py-4 text-[13px] transition-[width] duration-150 ${
+        collapsed ? "w-16" : "w-52"
+      }`}
+    >
+      <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} px-1`}>
+        {!collapsed && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-fg-muted">Faelo CRM</p>
+            <span className="font-heading text-base font-bold text-sidebar-fg">FAELO</span>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sidebar-fg-muted transition-colors hover:bg-sidebar-hover-bg hover:text-sidebar-fg"
+        >
+          <IconChevronLeft
+            width={14}
+            height={14}
+            className={`transition-transform duration-150 ${collapsed ? "rotate-180" : ""}`}
+          />
+        </button>
       </div>
 
-      <div className="flex flex-1 flex-col gap-1.5">
-        <p className="px-2 text-[11px] font-semibold uppercase tracking-wider text-accent-blue">Menu</p>
-        <nav className="flex flex-col gap-1">
+      <div className="flex flex-1 flex-col gap-1">
+        {!collapsed && (
+          <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-fg-muted">Menu</p>
+        )}
+        <nav className="flex flex-col gap-2">
           {NAV_ITEMS.map(({ href, label, Icon }) => {
             const active = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
             return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  active
-                    ? "bg-accent-blue text-white"
-                    : "text-text-muted hover:bg-card-bg hover:text-text-dark"
-                }`}
-              >
-                <Icon className="shrink-0" />
-                {label}
+              <Link key={href} href={href} title={collapsed ? label : undefined} className={itemClass(active)}>
+                <Icon className="shrink-0" width={16} height={16} />
+                {!collapsed && label}
               </Link>
             );
           })}
         </nav>
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-border-light pt-3">
+      <div className="flex flex-col gap-2 border-t border-sidebar-border pt-3">
         <button
           type="button"
           onClick={toggleTheme}
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-text-muted transition-colors hover:bg-card-bg hover:text-text-dark"
+          title={collapsed ? (theme === "dark" ? "Tema claro" : "Tema escuro") : undefined}
+          className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-sidebar-fg-muted transition-colors hover:bg-sidebar-hover-bg hover:text-sidebar-fg ${
+            collapsed ? "justify-center" : ""
+          }`}
         >
-          {theme === "dark" ? <IconSun className="shrink-0" /> : <IconMoon className="shrink-0" />}
-          {theme === "dark" ? "Tema claro" : "Tema escuro"}
+          {theme === "dark" ? (
+            <IconSun className="shrink-0" width={16} height={16} />
+          ) : (
+            <IconMoon className="shrink-0" width={16} height={16} />
+          )}
+          {!collapsed && (theme === "dark" ? "Tema claro" : "Tema escuro")}
         </button>
 
-        {user && <p className="truncate px-3 pt-1 text-xs text-text-muted">{user.name}</p>}
+        {user && !collapsed && (
+          <p className="truncate px-2.5 pt-0.5 text-xs text-sidebar-fg-muted">{user.name}</p>
+        )}
 
         <button
           type="button"
           onClick={handleLogout}
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-text-muted transition-colors hover:bg-card-bg hover:text-text-dark"
+          title={collapsed ? "Sair" : undefined}
+          className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-sidebar-fg-muted transition-colors hover:bg-sidebar-hover-bg hover:text-sidebar-fg ${
+            collapsed ? "justify-center" : ""
+          }`}
         >
-          <IconLogout className="shrink-0" />
-          Sair
+          <IconLogout className="shrink-0" width={16} height={16} />
+          {!collapsed && "Sair"}
         </button>
       </div>
     </aside>

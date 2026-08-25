@@ -37,6 +37,7 @@ export type Connection = {
   instance_name: string;
   phone: string | null;
   status: "connecting" | "connected" | "disconnected";
+  created_at: string | null;
 };
 
 export type ConnectionCreateResponse = {

@@ -18,7 +18,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
  * provider, nunca em :root). Preferência persistida em localStorage,
  * separada da sessão de auth. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     const stored = localStorage.getItem(THEME_KEY);

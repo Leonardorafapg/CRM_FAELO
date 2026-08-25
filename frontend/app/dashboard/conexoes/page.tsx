@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
+import { IconChevronLeft, IconDevice } from "@/components/layout/icons";
 import {
   Connection,
   listConnections,
@@ -19,6 +19,11 @@ import {
 function isAdminOrOwner(user: { role: string; is_admin: boolean } | null): boolean {
   if (!user) return false;
   return user.is_admin || user.role === "owner" || user.role === "admin";
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export default function ConexoesPage() {
@@ -104,30 +109,49 @@ export default function ConexoesPage() {
 
   if (!authorized) {
     return (
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 px-4 py-8">
-        <Link href="/dashboard" className="text-sm text-accent-blue hover:underline">
-          ← Dashboard
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-8">
+        <Link href="/dashboard" className="flex items-center gap-1 text-sm text-text-muted hover:text-text-dark">
+          <IconChevronLeft width={16} height={16} />
+          Voltar
         </Link>
         <p className="text-text-muted">Apenas administradores podem gerenciar conexões.</p>
       </main>
     );
   }
 
+  const connected = connections.filter((c) => c.status === "connected").length;
+  const connecting = connections.filter((c) => c.status === "connecting").length;
+  const disconnected = connections.filter((c) => c.status === "disconnected").length;
+
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8">
-      <div className="flex items-center justify-between">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/dashboard" className="text-sm text-accent-blue hover:underline">
-            ← Dashboard
+          <Link href="/dashboard" className="flex items-center gap-1 text-sm text-text-muted hover:text-text-dark">
+            <IconChevronLeft width={16} height={16} />
+            Voltar
           </Link>
-          <h1 className="font-heading text-2xl font-bold text-text-dark">Conexões</h1>
+          <h1 className="mt-2 font-heading text-2xl font-bold text-text-dark">Conexões</h1>
+          <p className="mt-1 text-sm text-text-muted">Gerencie suas conexões de WhatsApp</p>
         </div>
-        <Button onClick={handleConnect} loading={creating} loadingText="Gerando QR code...">
-          Conectar
-        </Button>
+        <button
+          type="button"
+          onClick={handleConnect}
+          disabled={creating}
+          className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          style={{ background: "var(--ai-gradient)" }}
+        >
+          {creating ? "Gerando QR code..." : "+ Nova Conexão"}
+        </button>
       </div>
 
       <ErrorMessage>{error}</ErrorMessage>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Conectadas" value={connected} dotColor="bg-green-500" />
+        <StatCard label="Conectando" value={connecting} dotColor="bg-amber-500" />
+        <StatCard label="Desconectadas" value={disconnected} dotColor="bg-red-500" />
+      </div>
 
       {qrcode && (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-border-light bg-card-bg p-6">
@@ -142,30 +166,49 @@ export default function ConexoesPage() {
         </div>
       )}
 
-      {loading ? (
-        <p className="text-text-muted">Carregando...</p>
-      ) : connections.length === 0 ? (
-        <p className="text-text-muted">Nenhuma conexão cadastrada ainda.</p>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-border-light bg-card-bg">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-page-bg text-text-muted">
+      <div className="overflow-hidden rounded-xl border border-border-light bg-card-bg">
+        <table className="w-full text-left text-sm">
+          <thead className="text-[11px] uppercase tracking-wide text-text-muted">
+            <tr>
+              <th className="px-4 py-3 font-medium">Conexão</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Criada em</th>
+              <th className="px-4 py-3 font-medium text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
               <tr>
-                <th className="px-4 py-2 font-medium">Instância</th>
-                <th className="px-4 py-2 font-medium">Telefone</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2" />
+                <td colSpan={4} className="px-4 py-10 text-center text-text-muted">
+                  Carregando...
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {connections.map((c) => (
+            ) : connections.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-14">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-border-light text-text-muted">
+                      <IconDevice width={20} height={20} />
+                    </span>
+                    <div>
+                      <p className="font-medium text-text-dark">Nenhuma conexão encontrada</p>
+                      <p className="text-sm text-text-muted">Clique em + Nova Conexão para começar</p>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              connections.map((c) => (
                 <tr key={c.id} className="border-t border-border-light">
-                  <td className="px-4 py-2 text-text-dark">{c.instance_name}</td>
-                  <td className="px-4 py-2 text-text-muted">{c.phone || "—"}</td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-3">
+                    <p className="text-text-dark">{c.instance_name}</p>
+                    <p className="text-xs text-text-muted">{c.phone || "Aguardando conexão"}</p>
+                  </td>
+                  <td className="px-4 py-3">
                     <StatusBadge status={c.status} />
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-3 text-text-muted">{formatDate(c.created_at)}</td>
+                  <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => handleDelete(c.id)}
                       className="text-sm text-red-600 hover:underline"
@@ -174,12 +217,24 @@ export default function ConexoesPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </main>
+  );
+}
+
+function StatCard({ label, value, dotColor }: { label: string; value: number; dotColor: string }) {
+  return (
+    <div className="rounded-xl border border-border-light bg-card-bg p-5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-text-muted">{label}</p>
+        <span className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
+      </div>
+      <p className="mt-2 text-3xl font-bold text-text-dark">{value}</p>
+    </div>
   );
 }
 
@@ -189,10 +244,12 @@ function StatusBadge({ status }: { status: Connection["status"] }) {
     connected: "Conectado",
     disconnected: "Desconectado",
   };
-  const colors: Record<Connection["status"], string> = {
-    connecting: "text-amber-600",
-    connected: "text-green-600",
-    disconnected: "text-text-muted",
+  const styles: Record<Connection["status"], string> = {
+    connecting: "bg-amber-100 text-amber-700",
+    connected: "bg-green-100 text-green-700",
+    disconnected: "bg-red-100 text-red-700",
   };
-  return <span className={colors[status]}>{labels[status]}</span>;
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${styles[status]}`}>{labels[status]}</span>
+  );
 }

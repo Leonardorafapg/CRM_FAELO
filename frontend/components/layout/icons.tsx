@@ -93,3 +93,20 @@ export function IconLogout(props: SVGProps<SVGSVGElement>) {
     </Icon>
   );
 }
+
+export function IconChevronLeft(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M15 6l-6 6 6 6" />
+    </Icon>
+  );
+}
+
+export function IconDevice(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <rect x="7" y="2" width="10" height="20" rx="2" />
+      <path d="M11 18h2" />
+    </Icon>
+  );
+}

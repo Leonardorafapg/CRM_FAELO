@@ -6,9 +6,19 @@
    de dark mode (faelo-blue/purple/glow, dark-bg/card/border) continuam
    definidos, só não são mais o default usado no body. */
 :root {
-  --page-bg: #faf6ef;
+  --page-bg: #f8f8f6;
   --card-bg: #ffffff;
-  --sidebar-bg: #dceafb;
+  /* Sidebar sempre com texto claro por cima — no tema claro e um painel de
+     destaque azul-marinho, no escuro e quase preto (ver bloco
+     [data-theme="dark"]). Nao usa --text-dark/--text-muted (esses sao pro
+     conteudo principal, que fica claro-sobre-branco). */
+  --sidebar-bg: #1c2a44;
+  --sidebar-fg: #f3f1fb;
+  --sidebar-fg-muted: #b3aad9;
+  --sidebar-active-bg: rgba(255, 255, 255, 0.14);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.07);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+
   --accent-blue: #2f7bfb;
   --border-light: #ece7de;
 
@@ -37,6 +47,11 @@
   --page-bg: var(--dark-bg);
   --card-bg: var(--dark-card);
   --sidebar-bg: #0b0b0e;
+  --sidebar-fg: var(--text-primary);
+  --sidebar-fg-muted: var(--text-secondary);
+  --sidebar-active-bg: rgba(255, 255, 255, 0.1);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+  --sidebar-border: var(--dark-border);
   --accent-blue: var(--faelo-blue);
   --border-light: var(--dark-border);
   --text-dark: var(--text-primary);
@@ -47,6 +62,11 @@
   --color-page-bg: var(--page-bg);
   --color-card-bg: var(--card-bg);
   --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-fg-muted: var(--sidebar-fg-muted);
+  --color-sidebar-active-bg: var(--sidebar-active-bg);
+  --color-sidebar-hover-bg: var(--sidebar-hover-bg);
+  --color-sidebar-border: var(--sidebar-border);
   --color-accent-blue: var(--accent-blue);
   --color-border-light: var(--border-light);
   --color-text-dark: var(--text-dark);
