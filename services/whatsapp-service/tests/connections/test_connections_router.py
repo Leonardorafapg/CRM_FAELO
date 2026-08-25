@@ -125,18 +125,58 @@ def test_list_connections_atualiza_status_para_connected_e_importa_historico(cli
     assert mensagens[0]["content"] == "Oi, tudo bem?"
 
 
-def test_list_connections_ja_conectada_nao_chama_evolution_de_novo(client, db):
+def test_list_connections_ja_conectada_nao_chama_get_instance_status(client, db):
+    """Conexao ja "connected" nao precisa consultar o estado de novo (nao
+    muda), mas ainda reimporta o historico a cada listagem (ver teste
+    abaixo) — e esse reimport, nao get_instance_status, que cobre "logar de
+    novo e puxar mensagens novas"."""
     tenant_id = str(uuid.uuid4())
     conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-ok", status="connected")
     db.add(conn)
     db.commit()
 
     status_mock = AsyncMock(return_value={"instance": {"state": "open"}})
-    with patch("app.connections.service.evolution_client.get_instance_status", status_mock):
+    with patch("app.connections.service.evolution_client.get_instance_status", status_mock), \
+         patch("app.evolution.client.find_chats", AsyncMock(return_value=[])):
         resp = client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
 
     assert resp.status_code == 200
     status_mock.assert_not_awaited()
+
+
+def test_list_connections_reimporta_historico_a_cada_chamada_sem_duplicar(client, db):
+    """"Toda vez ao logar precisa puxar o historico" — cada GET /connections
+    de uma conexao ja conectada reimporta (nao so na primeira transicao).
+    Mensagem repetida na segunda chamada nao duplica (dedup por
+    evolution_message_id) e nao bumpa last_activity da sessao sem mensagem
+    nova de verdade (ver _get_or_create_session_quiet)."""
+    tenant_id = str(uuid.uuid4())
+    conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-ok", status="connected")
+    db.add(conn)
+    db.commit()
+
+    chats_mock = AsyncMock(return_value=[{"remoteJid": "5511999999999@s.whatsapp.net", "pushName": "Cliente Teste"}])
+    messages_mock = AsyncMock(return_value=[
+        {"key": {"id": "MSG1", "remoteJid": "5511999999999@s.whatsapp.net", "fromMe": False},
+         "message": {"conversation": "Oi, tudo bem?"}},
+    ])
+
+    with patch("app.evolution.client.find_chats", chats_mock), patch("app.evolution.client.find_messages", messages_mock):
+        client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+        first = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
+
+        # "loga de novo" -- segunda chamada, mesma mensagem no historico
+        client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+        second = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
+
+    assert chats_mock.await_count == 2  # reimportou nas duas chamadas
+    assert len(second) == 1
+    assert first[0]["last_activity"] == second[0]["last_activity"]  # sem mensagem nova, nao pulou no inbox
+
+    mensagens = client.get(
+        f"/chat/{second[0]['id']}/mensagens?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)
+    ).json()
+    assert len(mensagens) == 1  # nao duplicou
 
 
 def test_admin_can_delete_connection(client, db):

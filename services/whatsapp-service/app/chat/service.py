@@ -73,6 +73,31 @@ def _get_or_create_session(tenant_id: str, connection_id: str, phone: str, conta
     return session
 
 
+def _get_or_create_session_quiet(tenant_id: str, connection_id: str, phone: str, contact_name: str | None, db: DbSession) -> ChatSession:
+    """Mesma resolucao de Session que _get_or_create_session, mas SEM
+    bumpar last_activity/reabrir a conversa so por tocar nela — usada pela
+    importacao de historico, que roda a cada carregamento da tela (ver
+    import_history) e nao pode fazer toda conversa antiga parecer "recem
+    ativa" so por ter sido revisitada sem mensagem nova de verdade."""
+    session_id = f"{tenant_id}:{phone}"
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if session:
+        if contact_name and not session.contact_name:
+            session.contact_name = contact_name
+        return session
+
+    session = ChatSession(
+        id=session_id,
+        tenant_id=tenant_id,
+        connection_id=connection_id,
+        phone=phone,
+        contact_name=contact_name,
+        is_open=True,
+    )
+    db.add(session)
+    return session
+
+
 def process_webhook_message(
     instance_name: str,
     evolution_message_id: str,
@@ -159,7 +184,7 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
 
         phone = remote_jid.split("@")[0]
         contact_name = chat.get("pushName") or chat.get("name")
-        session = _get_or_create_session(connection.tenant_id, connection.id, phone, contact_name, db)
+        session = _get_or_create_session_quiet(connection.tenant_id, connection.id, phone, contact_name, db)
         db.flush()  # garante id da Session persistido antes do insert de Message com FK
 
         try:
@@ -168,6 +193,7 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
             logger.exception(f"Falha ao importar mensagens do chat {remote_jid}")
             continue
 
+        new_in_chat = 0
         for raw in messages:
             fields = evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
             if not fields["message_id"] or not fields["content"]:
@@ -182,7 +208,14 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
                 content=fields["content"],
                 evolution_message_id=fields["message_id"],
             ))
-            imported_messages += 1
+            new_in_chat += 1
+
+        # So bumpa last_activity se de fato entrou mensagem nova nesta
+        # importacao — revisitar uma conversa ja totalmente importada nao
+        # pode fazer ela pular pro topo do inbox sem motivo real.
+        if new_in_chat > 0:
+            session.last_activity = datetime.now(timezone.utc)
+        imported_messages += new_in_chat
 
     db.commit()
     logger.info(

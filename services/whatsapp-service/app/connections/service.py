@@ -25,9 +25,18 @@ def _new_id() -> str:
 
 
 async def list_connections(tenant_id: str, db: DbSession) -> list[Connection]:
+    """Toda chamada (ou seja, todo carregamento da tela de Conexoes/login)
+    reconcilia com a Evolution: conexoes ainda nao conectadas tem o status
+    atualizado, e conexoes ja conectadas tem o historico reimportado — sem
+    isso o usuario so pegava o historico uma vez, na transicao inicial pra
+    "connected", e ficava sem jeito de puxar mensagens novas trocadas fora
+    do app (ex.: direto no celular) sem excluir e recriar a conexao."""
     connections = db.query(Connection).filter(Connection.tenant_id == tenant_id).order_by(Connection.created_at).all()
     for connection in connections:
-        if connection.status != "connected":
+        if connection.status == "connected":
+            from app.chat.service import import_history
+            await import_history(connection, db)
+        else:
             await _refresh_status_from_evolution(connection, db)
     return connections
 
