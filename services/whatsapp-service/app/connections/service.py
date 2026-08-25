@@ -24,8 +24,44 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-def list_connections(tenant_id: str, db: DbSession) -> list[Connection]:
-    return db.query(Connection).filter(Connection.tenant_id == tenant_id).order_by(Connection.created_at).all()
+async def list_connections(tenant_id: str, db: DbSession) -> list[Connection]:
+    connections = db.query(Connection).filter(Connection.tenant_id == tenant_id).order_by(Connection.created_at).all()
+    for connection in connections:
+        if connection.status != "connected":
+            await _refresh_status_from_evolution(connection, db)
+    return connections
+
+
+async def _refresh_status_from_evolution(connection: Connection, db: DbSession) -> None:
+    """Consulta o estado real da instancia na Evolution e persiste a
+    transicao — sem isso, o status ficava travado em "connecting" pra
+    sempre (nada mais no codigo chamava get_instance_status/update_status).
+    Chamado a cada GET /connections, que o frontend ja fica repetindo em
+    polling enquanto o QR code nao e escaneado."""
+    try:
+        payload = await evolution_client.get_instance_status(connection.instance_name)
+    except HTTPException:
+        # Evolution fora do ar momentaneamente — nao derruba a listagem,
+        # so mantem o status anterior ate a proxima tentativa.
+        return
+
+    state = evolution_client.extract_state(payload)
+    just_connected = state == "open" and connection.status != "connected"
+
+    if state == "open":
+        connection.status = "connected"
+    elif state in ("close", "closed"):
+        connection.status = "disconnected"
+    # qualquer outro valor (ex.: "connecting") mantem o status atual
+
+    db.commit()
+    db.refresh(connection)
+
+    if just_connected:
+        # Import local pra evitar ciclo: app.chat.service ja importa
+        # get_connection_or_404 deste modulo.
+        from app.chat.service import import_history
+        await import_history(connection, db)
 
 
 def get_connection_or_404(connection_id: str, tenant_id: str, db: DbSession) -> Connection:

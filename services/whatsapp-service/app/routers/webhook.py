@@ -11,6 +11,7 @@ from app.chat import service
 from app.chat.schemas import MessageOut
 from app.ws.registry import broadcast
 from app.connections.service import get_connection_by_instance
+from app.evolution.client import extract_message_fields
 from shared.logging_config import get_logger
 
 logger = get_logger("whatsapp-service")
@@ -30,33 +31,14 @@ def require_webhook_secret(x_webhook_secret: str = Header(default="")) -> None:
 
 def _extract_fields(payload: dict) -> dict:
     """Payload real da Evolution API e aninhado e varia por versao/evento —
-    extrai de forma tolerante os campos minimos que este servico usa. Nao
-    tenta suportar todo o shape da Evolution, so o necessario pro fluxo de
-    texto simples deste documento."""
+    so o instance_name (que fica no nivel do payload, fora do "data") e
+    especifico do webhook; o resto da extracao (mensagem em si) e a mesma
+    logica usada pra importar historico (ver evolution.client.extract_message_fields),
+    factorizada la pra nao duplicar."""
     data = payload.get("data", payload)
-    key = data.get("key", {}) if isinstance(data, dict) else {}
-    message = data.get("message", {}) if isinstance(data, dict) else {}
-
-    instance_name = payload.get("instance") or data.get("instance")
-    message_id = key.get("id") or data.get("id")
-    phone = (key.get("remoteJid") or data.get("from") or "").split("@")[0]
-    from_me = key.get("fromMe", False)
-    content = (
-        message.get("conversation")
-        or (message.get("extendedTextMessage") or {}).get("text")
-        or data.get("text")
-        or ""
-    )
-    contact_name = data.get("pushName")
-
-    return {
-        "instance_name": instance_name,
-        "message_id": message_id,
-        "phone": phone,
-        "role": "attendant" if from_me else "user",
-        "content": content,
-        "contact_name": contact_name,
-    }
+    fields = extract_message_fields(data if isinstance(data, dict) else {})
+    fields["instance_name"] = payload.get("instance") or (data.get("instance") if isinstance(data, dict) else None)
+    return fields
 
 
 @router.post("/evolution")

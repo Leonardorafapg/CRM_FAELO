@@ -26,8 +26,8 @@ def _webhook_base_url(request: Request) -> str:
 
 
 @router.get("", response_model=list[ConnectionOut])
-def list_connections(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    return service.list_connections(current_user["tenant_id"], db)
+async def list_connections(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    return await service.list_connections(current_user["tenant_id"], db)
 
 
 @router.post("", response_model=ConnectionCreateResponse)

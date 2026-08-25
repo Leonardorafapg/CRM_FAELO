@@ -85,6 +85,60 @@ def test_list_connections_scoped_by_tenant(client, db):
     assert names == ["inst-a"]
 
 
+def test_list_connections_atualiza_status_para_connected_e_importa_historico(client, db):
+    """Cobre o bug real: status ficava travado em "connecting" pra sempre
+    porque nada chamava get_instance_status. Agora todo GET /connections
+    consulta a Evolution pra conexoes ainda nao conectadas e, na transicao
+    pra "connected", importa o historico de chats existente (ver
+    app/connections/service.py::_refresh_status_from_evolution e
+    app/chat/service.py::import_history)."""
+    tenant_id = str(uuid.uuid4())
+    conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-connecting", status="connecting")
+    db.add(conn)
+    db.commit()
+
+    status_mock = AsyncMock(return_value={"instance": {"state": "open"}})
+    chats_mock = AsyncMock(return_value=[{"remoteJid": "5511999999999@s.whatsapp.net", "pushName": "Cliente Teste"}])
+    messages_mock = AsyncMock(return_value=[
+        {"key": {"id": "MSG1", "remoteJid": "5511999999999@s.whatsapp.net", "fromMe": False},
+         "message": {"conversation": "Oi, tudo bem?"}},
+    ])
+
+    with patch("app.connections.service.evolution_client.get_instance_status", status_mock), \
+         patch("app.evolution.client.find_chats", chats_mock), \
+         patch("app.evolution.client.find_messages", messages_mock):
+        resp = client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["status"] == "connected"
+    chats_mock.assert_awaited_once_with("inst-connecting")
+
+    sessoes = client.get(f"/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
+    assert len(sessoes) == 1
+    assert sessoes[0]["phone"] == "5511999999999"
+
+    mensagens = client.get(
+        f"/chat/{sessoes[0]['id']}/mensagens?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)
+    ).json()
+    assert len(mensagens) == 1
+    assert mensagens[0]["content"] == "Oi, tudo bem?"
+
+
+def test_list_connections_ja_conectada_nao_chama_evolution_de_novo(client, db):
+    tenant_id = str(uuid.uuid4())
+    conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-ok", status="connected")
+    db.add(conn)
+    db.commit()
+
+    status_mock = AsyncMock(return_value={"instance": {"state": "open"}})
+    with patch("app.connections.service.evolution_client.get_instance_status", status_mock):
+        resp = client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+
+    assert resp.status_code == 200
+    status_mock.assert_not_awaited()
+
+
 def test_admin_can_delete_connection(client, db):
     tenant_id = str(uuid.uuid4())
     conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-x", status="connected")

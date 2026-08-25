@@ -137,6 +137,60 @@ async def responder(session_id: str, tenant_id: str, content: str, db: DbSession
     return message
 
 
+async def import_history(connection: Connection, db: DbSession, chats_limit: int = 50, messages_per_chat: int = 50) -> None:
+    """Puxa as conversas e mensagens que ja existiam no WhatsApp antes de
+    conectar — sem isso, o inbox comeca vazio mesmo que o numero ja tivesse
+    historico. Chamado uma vez, no exato momento em que a Connection
+    transiciona pra "connected" (ver app/connections/service.py). Best-effort
+    de ponta a ponta: qualquer falha e logada e ignorada, nunca propaga —
+    perder o historico antigo e recuperavel (roda de novo na proxima
+    reconexao), travar o fluxo de conexao por causa disso nao seria."""
+    try:
+        chats = await evolution_client.find_chats(connection.instance_name)
+    except Exception:
+        logger.exception(f"Falha ao importar historico da instancia {connection.instance_name}")
+        return
+
+    imported_messages = 0
+    for chat in chats[:chats_limit]:
+        remote_jid = chat.get("remoteJid") or chat.get("id") or ""
+        if not remote_jid or remote_jid.endswith("@g.us"):
+            continue  # grupos ficam de fora nesta fase — so conversas 1:1, mesmo escopo do resto do atendimento
+
+        phone = remote_jid.split("@")[0]
+        contact_name = chat.get("pushName") or chat.get("name")
+        session = _get_or_create_session(connection.tenant_id, connection.id, phone, contact_name, db)
+        db.flush()  # garante id da Session persistido antes do insert de Message com FK
+
+        try:
+            messages = await evolution_client.find_messages(connection.instance_name, remote_jid, limit=messages_per_chat)
+        except Exception:
+            logger.exception(f"Falha ao importar mensagens do chat {remote_jid}")
+            continue
+
+        for raw in messages:
+            fields = evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
+            if not fields["message_id"] or not fields["content"]:
+                continue
+            existing = db.query(Message).filter(Message.evolution_message_id == fields["message_id"]).first()
+            if existing:
+                continue
+            db.add(Message(
+                id=_new_id(),
+                session_id=session.id,
+                role=fields["role"],
+                content=fields["content"],
+                evolution_message_id=fields["message_id"],
+            ))
+            imported_messages += 1
+
+    db.commit()
+    logger.info(
+        f"Historico importado: tenant={connection.tenant_id} instance={connection.instance_name} "
+        f"chats={len(chats)} mensagens={imported_messages}"
+    )
+
+
 def encerrar_atendimento(session_id: str, tenant_id: str, db: DbSession) -> ChatSession:
     session = get_session_or_404(session_id, tenant_id, db)
     session.is_open = False
