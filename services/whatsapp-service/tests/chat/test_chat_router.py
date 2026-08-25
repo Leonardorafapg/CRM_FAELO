@@ -40,6 +40,22 @@ def test_list_sessoes_scoped_by_tenant(client, db):
     assert sessions[0]["id"] == f"{tenant_a}:5511888888888"
 
 
+def test_list_sessoes_traz_foto_url_da_evolution(client, db):
+    """Foto de perfil nao fica no banco (ver app/chat/service.py::list_sessoes)
+    — busca ao vivo via fetch_profile_picture_url_cached, mesmo padrao dos
+    projetos de referencia (Foodapp/Simbora)."""
+    tenant_id = str(uuid.uuid4())
+    conn, session = _make_session(db, tenant_id)
+
+    foto_mock = AsyncMock(return_value="https://pps.whatsapp.net/foto.jpg")
+    with patch("app.chat.service.evolution_client.fetch_profile_picture_url_cached", foto_mock):
+        resp = client.get("/sessoes", headers=auth_headers(tenant_id, UserRole.attendant))
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["foto_url"] == "https://pps.whatsapp.net/foto.jpg"
+    foto_mock.assert_awaited_once_with(conn.instance_name, session.phone)
+
+
 def test_attendant_can_responder(client, db):
     tenant_id = str(uuid.uuid4())
     conn, session = _make_session(db, tenant_id)

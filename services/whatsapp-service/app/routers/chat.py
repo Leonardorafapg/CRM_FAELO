@@ -14,13 +14,13 @@ router = APIRouter(tags=["chat"])
 
 
 @router.get("/sessoes", response_model=list[SessionOut])
-def list_sessoes(
+async def list_sessoes(
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return service.list_sessoes(current_user["tenant_id"], db, limit=limit, offset=offset)
+    return await service.list_sessoes(current_user["tenant_id"], db, limit=limit, offset=offset)
 
 
 @router.get("/chat/{session_id}/mensagens", response_model=list[MessageOut])

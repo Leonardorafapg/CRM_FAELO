@@ -10,6 +10,10 @@ class SessionOut(BaseModel):
     contact_name: Optional[str] = None
     is_open: bool
     last_activity: Optional[datetime] = None
+    # Nao persistida no banco — buscada ao vivo na Evolution API a cada
+    # listagem (com cache em memoria), mesmo padrao dos projetos de
+    # referencia (Foodapp/Simbora). Ver app/chat/service.py::list_sessoes.
+    foto_url: Optional[str] = None
 
     class Config:
         from_attributes = True

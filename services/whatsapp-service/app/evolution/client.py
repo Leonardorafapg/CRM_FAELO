@@ -3,6 +3,7 @@ assincronas via o client singleton do shared — nunca cria httpx.AsyncClient()
 novo a cada chamada. Falha de chamada externa vira HTTPException (502/400),
 nunca e engolida silenciosamente."""
 import os
+import time
 
 import httpx
 from fastapi import HTTPException
@@ -164,6 +165,50 @@ async def send_message(instance_name: str, phone: str, text: str) -> dict:
     except httpx.HTTPError as e:
         logger.error(f"Falha ao enviar mensagem via instancia {instance_name}: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=502, detail="Falha ao enviar mensagem via Evolution API")
+
+
+# Cache em memoria da foto de perfil, mesmo padrao usado nos projetos de
+# referencia (Foodapp/Simbora, evolution_service.py / evolution_client.py
+# de la): TTL de 6h, teto de entradas, sem Redis/banco — reseta a cada
+# deploy/restart do processo, o que e aceitavel pra uma foto de perfil.
+_foto_cache: dict[str, tuple[str | None, float]] = {}
+_FOTO_CACHE_TTL_SECONDS = 6 * 60 * 60
+_FOTO_CACHE_MAX_ENTRIES = 20_000
+
+
+async def fetch_profile_picture_url(instance_name: str, phone: str) -> str | None:
+    """Busca a foto de perfil do contato na Evolution. Best-effort: numero
+    sem foto, instancia fora do ar ou endpoint nao suportado nesta versao
+    da Evolution viram None, nunca excecao — a foto e so um adorno visual,
+    nao pode derrubar a listagem de conversas."""
+    client = get_async_client()
+    try:
+        resp = await client.post(
+            f"{EVOLUTION_API_URL}/chat/fetchProfilePictureUrl/{instance_name}",
+            headers=_headers(),
+            json={"number": phone},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except httpx.HTTPError:
+        return None
+    return data.get("profilePictureUrl") if isinstance(data, dict) else None
+
+
+async def fetch_profile_picture_url_cached(instance_name: str, phone: str) -> str | None:
+    """Evita bater na Evolution pra cada contato em toda listagem de
+    conversas — ver _foto_cache acima."""
+    key = f"{instance_name}:{phone}"
+    now = time.monotonic()
+    cached = _foto_cache.get(key)
+    if cached and (now - cached[1]) < _FOTO_CACHE_TTL_SECONDS:
+        return cached[0]
+
+    url = await fetch_profile_picture_url(instance_name, phone)
+    if len(_foto_cache) >= _FOTO_CACHE_MAX_ENTRIES:
+        _foto_cache.clear()  # purge simples — teto raramente atingido com poucos tenants/contatos
+    _foto_cache[key] = (url, now)
+    return url
 
 
 async def delete_instance(instance_name: str) -> None:

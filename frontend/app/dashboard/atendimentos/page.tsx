@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useAuth } from "@/contexts/AuthContext";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
+import { Avatar } from "@/components/ui/Avatar";
 import {
   Sessao,
   Mensagem,
@@ -141,13 +142,16 @@ export default function AtendimentosPage() {
                 <li key={s.id}>
                   <button
                     onClick={() => setSelected(s.id)}
-                    className={`w-full border-b border-border-light px-4 py-3 text-left text-sm hover:bg-page-bg ${
+                    className={`flex w-full items-center gap-3 border-b border-border-light px-4 py-3 text-left text-sm hover:bg-page-bg ${
                       selected === s.id ? "bg-page-bg" : ""
                     }`}
                   >
-                    <p className="font-medium text-text-dark">{s.contact_name || s.phone}</p>
-                    <p className="text-text-muted">{s.phone}</p>
-                    {!s.is_open && <p className="text-xs text-text-muted">Encerrado</p>}
+                    <Avatar name={s.contact_name || s.phone} photoUrl={s.foto_url} size={36} />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-text-dark">{s.contact_name || s.phone}</p>
+                      <p className="truncate text-text-muted">{s.phone}</p>
+                      {!s.is_open && <p className="text-xs text-text-muted">Encerrado</p>}
+                    </div>
                   </button>
                 </li>
               ))}
@@ -161,11 +165,18 @@ export default function AtendimentosPage() {
           ) : (
             <>
               <div className="flex items-center justify-between border-b border-border-light px-4 py-3">
-                <div>
-                  <p className="font-medium text-text-dark">
-                    {selectedSessao.contact_name || selectedSessao.phone}
-                  </p>
-                  <p className="text-xs text-text-muted">{selectedSessao.phone}</p>
+                <div className="flex items-center gap-3">
+                  <Avatar
+                    name={selectedSessao.contact_name || selectedSessao.phone}
+                    photoUrl={selectedSessao.foto_url}
+                    size={36}
+                  />
+                  <div>
+                    <p className="font-medium text-text-dark">
+                      {selectedSessao.contact_name || selectedSessao.phone}
+                    </p>
+                    <p className="text-xs text-text-muted">{selectedSessao.phone}</p>
+                  </div>
                 </div>
                 {selectedSessao.is_open && (
                   <button

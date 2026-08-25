@@ -1,6 +1,7 @@
 """Regras de negocio de Session/Message (atendimento). Tudo escopado por
 tenant_id vindo do JWT, exceto o webhook (autenticado por secret, resolve o
 tenant via Connection.instance_name)."""
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -20,8 +21,12 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: int = 0) -> list[ChatSession]:
-    return (
+async def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: int = 0) -> list[dict]:
+    """Foto de perfil NAO fica no banco (mesmo padrao dos projetos de
+    referencia Foodapp/Simbora) — busca ao vivo na Evolution, em paralelo
+    pra cada sessao da pagina atual, com cache em memoria de 6h dentro do
+    proprio evolution_client (ver fetch_profile_picture_url_cached)."""
+    sessions = (
         db.query(ChatSession)
         .filter(ChatSession.tenant_id == tenant_id)
         .order_by(ChatSession.last_activity.desc())
@@ -29,6 +34,33 @@ def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: int = 0
         .offset(offset)
         .all()
     )
+    if not sessions:
+        return []
+
+    connections = {
+        c.id: c for c in db.query(Connection).filter(Connection.tenant_id == tenant_id).all()
+    }
+
+    async def _foto(session: ChatSession) -> str | None:
+        connection = connections.get(session.connection_id)
+        if not connection:
+            return None
+        return await evolution_client.fetch_profile_picture_url_cached(connection.instance_name, session.phone)
+
+    fotos = await asyncio.gather(*(_foto(s) for s in sessions))
+
+    return [
+        {
+            "id": s.id,
+            "connection_id": s.connection_id,
+            "phone": s.phone,
+            "contact_name": s.contact_name,
+            "is_open": s.is_open,
+            "last_activity": s.last_activity,
+            "foto_url": foto,
+        }
+        for s, foto in zip(sessions, fotos)
+    ]
 
 
 def get_session_or_404(session_id: str, tenant_id: str, db: DbSession) -> ChatSession:

@@ -52,6 +52,12 @@ export type Sessao = {
   contact_name: string | null;
   is_open: boolean;
   last_activity: string | null;
+  // Nao persistida no banco — buscada ao vivo na Evolution API pelo
+  // whatsapp-service a cada listagem (com cache em memoria de 6h la).
+  // Mesmo padrao dos projetos de referencia: usar direto num <img>, sem
+  // proxy nem <Image> do Next (URL externa arbitraria, sem loader
+  // configurado), com fallback de iniciais quando null.
+  foto_url: string | null;
 };
 
 export type Mensagem = {
