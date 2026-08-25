@@ -29,6 +29,20 @@
   --ai-gradient: linear-gradient(135deg, #007bff 0%, #8f42c1 100%);
 }
 
+/* Tema escuro — escopado por atributo (nao em :root) de proposito: so se
+   aplica dentro do wrapper do dashboard (ver app/dashboard/layout.tsx), que
+   seta data-theme via ThemeContext. Login/registro/home ficam sempre no
+   tema claro fixo, nunca entram em contato com esse bloco. */
+[data-theme="dark"] {
+  --page-bg: var(--dark-bg);
+  --card-bg: var(--dark-card);
+  --sidebar-bg: #0b0b0e;
+  --accent-blue: var(--faelo-blue);
+  --border-light: var(--dark-border);
+  --text-dark: var(--text-primary);
+  --text-muted: var(--text-secondary);
+}
+
 @theme inline {
   --color-page-bg: var(--page-bg);
   --color-card-bg: var(--card-bg);
