@@ -203,15 +203,19 @@ async def find_contacts(instance_name: str) -> list[dict]:
 
 def build_contact_name_map(contacts: list[dict]) -> dict[str, str]:
     """Telefone (sem @s.whatsapp.net) -> nome, a partir do retorno de
-    find_contacts. Shape exato do contato varia entre versoes da Evolution
-    (id/remoteJid, pushName/name) — mesmo tratamento tolerante do resto do
-    client. Contato sem nome nao entra no mapa."""
+    find_contacts. Shape exato do contato varia entre versoes da Evolution;
+    "id" no registro de contato e um id interno do banco da Evolution
+    (nao um JID) — "remoteJid" e que tem o formato "{telefone}@s.whatsapp.net",
+    "id" so entra como fallback pra versoes antigas onde ele proprio e o JID.
+    Contato sem nome nao entra no mapa (inclui pushName == "", que a propria
+    Evolution as vezes devolve vazio mesmo pra contato salvo — bug conhecido
+    e sem previsao de fix do lado deles, ver EvolutionAPI/evolution-api#2004)."""
     result: dict[str, str] = {}
     for contact in contacts:
         if not isinstance(contact, dict):
             continue
-        jid = contact.get("id") or contact.get("remoteJid") or ""
-        if not jid or jid.endswith("@g.us"):
+        jid = contact.get("remoteJid") or contact.get("id") or ""
+        if not jid or "@" not in jid or jid.endswith("@g.us"):
             continue
         phone = jid.split("@")[0]
         name = contact.get("pushName") or contact.get("name") or contact.get("notify")
