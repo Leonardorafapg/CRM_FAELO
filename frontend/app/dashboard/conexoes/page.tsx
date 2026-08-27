@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useAuth } from "@/contexts/AuthContext";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
-import { IconChevronLeft, IconDevice } from "@/components/layout/icons";
+import { IconDevice } from "@/components/layout/icons";
 import {
   Connection,
   listConnections,
@@ -110,10 +109,6 @@ export default function ConexoesPage() {
   if (!authorized) {
     return (
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 px-4 py-8">
-        <Link href="/dashboard" className="flex items-center gap-1 text-sm text-text-muted hover:text-text-dark">
-          <IconChevronLeft width={16} height={16} />
-          Voltar
-        </Link>
         <p className="text-text-muted">Apenas administradores podem gerenciar conexões.</p>
       </main>
     );
@@ -127,19 +122,14 @@ export default function ConexoesPage() {
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/dashboard" className="flex items-center gap-1 text-sm text-text-muted hover:text-text-dark">
-            <IconChevronLeft width={16} height={16} />
-            Voltar
-          </Link>
-          <h1 className="mt-2 font-heading text-2xl font-bold text-text-dark">Conexões</h1>
+          <h1 className="font-heading text-2xl font-bold text-text-dark">Conexões</h1>
           <p className="mt-1 text-sm text-text-muted">Gerencie suas conexões de WhatsApp</p>
         </div>
         <button
           type="button"
           onClick={handleConnect}
           disabled={creating}
-          className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-          style={{ background: "var(--ai-gradient)" }}
+          className="rounded-lg bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {creating ? "Gerando QR code..." : "+ Nova Conexão"}
         </button>

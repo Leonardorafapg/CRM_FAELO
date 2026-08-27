@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.contacts import service
 from app.contacts.schemas import ContactCreate, ContactUpdate, ContactStatusCreate
-from app.pipeline import service as pipeline_service
-from app.pipeline.schemas import PipelineCreate, StageCreate
+from app.stages import service as stages_service
+from app.stages.schemas import StageCreate
 
 
 def _tenant() -> str:
@@ -48,8 +48,7 @@ def test_create_contact_com_status_de_outro_tenant_levanta_404(db: Session):
 
 def test_create_contact_com_stage_de_outro_tenant_levanta_404(db: Session):
     tenant_a, tenant_b = _tenant(), _tenant()
-    pipeline = pipeline_service.create_pipeline(tenant_a, PipelineCreate(name="Vendas"), db)
-    stage = pipeline_service.create_stage(pipeline.id, tenant_a, StageCreate(name="Entrada"), db)
+    stage = stages_service.create_stage(tenant_a, StageCreate(name="Entrada"), db)
     with pytest.raises(HTTPException) as exc:
         service.create_contact(tenant_b, ContactCreate(name="X", phone="123", stage_id=stage.id), db)
     assert exc.value.status_code == 404
@@ -65,9 +64,8 @@ def test_get_contact_or_404_de_outro_tenant_levanta_404(db: Session):
 
 def test_update_contact_move_de_stage(db: Session):
     tenant = _tenant()
-    pipeline = pipeline_service.create_pipeline(tenant, PipelineCreate(name="Vendas"), db)
-    stage_a = pipeline_service.create_stage(pipeline.id, tenant, StageCreate(name="Entrada"), db)
-    stage_b = pipeline_service.create_stage(pipeline.id, tenant, StageCreate(name="Proposta"), db)
+    stage_a = stages_service.create_stage(tenant, StageCreate(name="Entrada"), db)
+    stage_b = stages_service.create_stage(tenant, StageCreate(name="Proposta"), db)
     contact = service.create_contact(tenant, ContactCreate(name="Carlos", phone="11999999999", stage_id=stage_a.id), db)
 
     updated = service.update_contact(contact.id, tenant, ContactUpdate(stage_id=stage_b.id), db)
@@ -94,9 +92,8 @@ def test_delete_contact(db: Session):
 
 def test_list_contacts_filtra_por_stage(db: Session):
     tenant = _tenant()
-    pipeline = pipeline_service.create_pipeline(tenant, PipelineCreate(name="Vendas"), db)
-    stage_a = pipeline_service.create_stage(pipeline.id, tenant, StageCreate(name="Entrada"), db)
-    stage_b = pipeline_service.create_stage(pipeline.id, tenant, StageCreate(name="Proposta"), db)
+    stage_a = stages_service.create_stage(tenant, StageCreate(name="Entrada"), db)
+    stage_b = stages_service.create_stage(tenant, StageCreate(name="Proposta"), db)
     service.create_contact(tenant, ContactCreate(name="A", phone="1", stage_id=stage_a.id), db)
     service.create_contact(tenant, ContactCreate(name="B", phone="2", stage_id=stage_b.id), db)
 

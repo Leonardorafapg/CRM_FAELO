@@ -18,7 +18,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import Base, engine
-import app.pipeline.models  # noqa: F401 — registra Pipeline/Stage em Base.metadata
+import app.stages.models    # noqa: F401 — registra Stage em Base.metadata
 import app.contacts.models  # noqa: F401 — registra Contact/ContactStatus
 from shared.roles import UserRole
 

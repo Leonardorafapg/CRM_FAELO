@@ -6,7 +6,7 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 
 const SHORTCUTS = [
   { href: "/dashboard/clientes", label: "Clientes", description: "Cadastrar e gerenciar clientes." },
-  { href: "/dashboard/quadros", label: "Quadros", description: "Kanban de clientes por pipeline." },
+  { href: "/dashboard/quadros", label: "Quadros", description: "Kanban de clientes por etapa." },
   { href: "/dashboard/conexoes", label: "Conexões", description: "Conectar WhatsApp via QR code." },
   { href: "/dashboard/atendimentos", label: "Atendimentos", description: "Conversas do WhatsApp em tempo real." },
 ];

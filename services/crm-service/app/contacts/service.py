@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.contacts.models import Contact, ContactStatus
 from app.contacts.schemas import ContactCreate, ContactUpdate, ContactStatusCreate, ContactStatusUpdate
-from app.pipeline.service import get_stage_or_404
+from app.stages.service import get_stage_or_404
 
 
 def _new_id() -> str:

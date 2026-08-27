@@ -1,43 +1,40 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useKanban } from "@/hooks/useKanban";
-import { BackLink } from "@/components/ui/BackLink";
-import { Select } from "@/components/ui/Select";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
+import { IconSearch } from "@/components/layout/icons";
 import { KanbanBoard } from "@/components/crm/KanbanBoard";
 
 export default function QuadrosPage() {
   const ready = useRequireAuth();
   const {
-    pipelines,
-    selectedPipelineId,
-    setSelectedPipelineId,
     stages,
     contacts,
     loading,
     error,
     isAdmin,
     moveContact,
-    handleCreatePipeline,
     handleCreateStage,
+    handleRenameStage,
+    handleDeleteStage,
+    handleCreateContact,
   } = useKanban();
 
-  const [newPipelineName, setNewPipelineName] = useState("");
   const [newStageName, setNewStageName] = useState("");
-  const [showPipelineForm, setShowPipelineForm] = useState(false);
   const [showStageForm, setShowStageForm] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredContacts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return contacts;
+    return contacts.filter(
+      (c) => c.name.toLowerCase().includes(query) || c.phone.toLowerCase().includes(query)
+    );
+  }, [contacts, search]);
 
   if (!ready) return null;
-
-  async function submitPipeline(e: FormEvent) {
-    e.preventDefault();
-    if (!newPipelineName.trim()) return;
-    await handleCreatePipeline(newPipelineName.trim());
-    setNewPipelineName("");
-    setShowPipelineForm(false);
-  }
 
   async function submitStage(e: FormEvent) {
     e.preventDefault();
@@ -48,60 +45,39 @@ export default function QuadrosPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8">
-      <div>
-        <BackLink href="/dashboard">← Dashboard</BackLink>
-        <h1 className="font-heading text-2xl font-bold text-text-dark">Quadros</h1>
-      </div>
+    <main className="flex w-full flex-1 flex-col gap-6 px-6 py-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-text-dark">Quadros</h1>
+          <p className="mt-1 text-sm text-text-muted">Acompanhe seus clientes por etapa.</p>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        {pipelines.length > 0 && (
-          <Select value={selectedPipelineId ?? ""} onChange={(e) => setSelectedPipelineId(e.target.value)}>
-            {pipelines.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-                {p.is_default ? " (padrão)" : ""}
-              </option>
-            ))}
-          </Select>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <IconSearch
+              width={16}
+              height={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted/60"
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar cliente..."
+              className="w-56 rounded-lg border border-border-light bg-card-bg py-2 pl-9 pr-3 text-sm text-text-dark outline-none focus:border-accent-blue"
+            />
+          </div>
 
-        {isAdmin && (
-          <>
+          {isAdmin && (
             <button
               type="button"
-              onClick={() => setShowPipelineForm((v) => !v)}
-              className="text-sm text-accent-blue hover:underline"
+              onClick={() => setShowStageForm((v) => !v)}
+              className="shrink-0 rounded-lg bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
-              + Novo quadro
+              {showStageForm ? "Cancelar" : "+ Nova coluna"}
             </button>
-            {selectedPipelineId && (
-              <button
-                type="button"
-                onClick={() => setShowStageForm((v) => !v)}
-                className="text-sm text-accent-blue hover:underline"
-              >
-                + Nova coluna
-              </button>
-            )}
-          </>
-        )}
+          )}
+        </div>
       </div>
-
-      {showPipelineForm && (
-        <form onSubmit={submitPipeline} className="flex gap-2">
-          <input
-            autoFocus
-            value={newPipelineName}
-            onChange={(e) => setNewPipelineName(e.target.value)}
-            placeholder="Nome do quadro"
-            className="rounded-lg border border-border-light bg-card-bg px-3 py-2 text-sm text-text-dark outline-none focus:border-accent-blue"
-          />
-          <button type="submit" className="rounded-lg bg-accent-blue px-4 py-2 text-sm font-medium text-white">
-            Criar
-          </button>
-        </form>
-      )}
 
       {showStageForm && (
         <form onSubmit={submitStage} className="flex gap-2">
@@ -122,12 +98,19 @@ export default function QuadrosPage() {
 
       {loading ? (
         <p className="text-text-muted">Carregando...</p>
-      ) : pipelines.length === 0 ? (
+      ) : stages.length === 0 ? (
         <p className="text-text-muted">
-          Nenhum quadro ainda. {isAdmin ? "Crie um acima para começar." : "Peça a um admin para criar um."}
+          Nenhuma coluna ainda. {isAdmin ? "Crie uma acima para começar." : "Peça a um admin para criar uma."}
         </p>
       ) : (
-        <KanbanBoard stages={stages} contacts={contacts} onMove={moveContact} />
+        <KanbanBoard
+          stages={stages}
+          contacts={filteredContacts}
+          onMove={moveContact}
+          onRenameStage={isAdmin ? handleRenameStage : undefined}
+          onDeleteStage={isAdmin ? handleDeleteStage : undefined}
+          onAddContact={handleCreateContact}
+        />
       )}
     </main>
   );

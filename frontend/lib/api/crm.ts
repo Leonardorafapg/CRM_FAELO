@@ -1,6 +1,8 @@
 // Tipos e chamadas do crm-service — espelham exatamente os schemas/rotas de
-// services/crm-service/app (contacts, pipeline). Toda funcao recebe o token
+// services/crm-service/app (contacts, stages). Toda funcao recebe o token
 // como primeiro argumento (este arquivo nao tem acesso ao AuthContext).
+// Sem conceito de Pipeline/multi-quadro (removido) — quadro e unico e fixo
+// por tenant, so as Stages (colunas) sao configuraveis.
 import { authRequest } from "./client";
 
 export type ContactStatus = {
@@ -23,17 +25,8 @@ export type Contact = {
   created_at: string;
 };
 
-export type Pipeline = {
-  id: string;
-  name: string;
-  description: string | null;
-  active: boolean;
-  is_default: boolean;
-};
-
 export type Stage = {
   id: string;
-  pipeline_id: string;
   name: string;
   order: number;
   color: string | null;
@@ -41,34 +34,14 @@ export type Stage = {
   is_entry: boolean;
 };
 
-// Pipelines
-export const listPipelines = (token: string) =>
-  authRequest<Pipeline[]>("GET", "/pipelines", token);
-
-export const createPipeline = (
-  token: string,
-  body: { name: string; description?: string; is_default?: boolean }
-) => authRequest<Pipeline>("POST", "/pipelines", token, body);
-
-export const updatePipeline = (
-  token: string,
-  id: string,
-  body: Partial<Pick<Pipeline, "name" | "description" | "active" | "is_default">>
-) => authRequest<Pipeline>("PATCH", `/pipelines/${id}`, token, body);
-
-export const deletePipeline = (token: string, id: string) =>
-  authRequest<{ ok: true }>("DELETE", `/pipelines/${id}`, token);
-
-// Stages (aninhado em /pipelines/{id}/stages pra list/create, direto em
-// /stages/{id} pra patch/delete — mesmo padrao do backend)
-export const listStages = (token: string, pipelineId: string) =>
-  authRequest<Stage[]>("GET", `/pipelines/${pipelineId}/stages`, token);
+// Stages — recurso direto do tenant (quadro unico e fixo, sem multi-pipeline).
+export const listStages = (token: string) =>
+  authRequest<Stage[]>("GET", "/stages", token);
 
 export const createStage = (
   token: string,
-  pipelineId: string,
   body: { name: string; color?: string; is_entry?: boolean }
-) => authRequest<Stage>("POST", `/pipelines/${pipelineId}/stages`, token, body);
+) => authRequest<Stage>("POST", "/stages", token, body);
 
 export const updateStage = (
   token: string,

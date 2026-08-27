@@ -6,16 +6,17 @@ type KanbanBoardProps = {
   stages: Stage[];
   contacts: Contact[];
   onMove: (contactId: string, stageId: string) => void;
+  onRenameStage?: (stageId: string, name: string) => void | Promise<void>;
+  onDeleteStage?: (stageId: string) => void | Promise<void>;
+  onAddContact?: (stageId: string, name: string, phone: string) => void | Promise<void>;
 };
 
-/** Quadro completo: uma coluna por Stage do pipeline selecionado, mais uma
+/** Quadro completo (único e fixo por tenant): uma coluna por Stage, mais uma
  * coluna fixa "Sem coluna" pra clientes com stage_id nulo — sem ela, um
  * cliente criado sem stage nunca aparece em lugar nenhum do board e não tem
  * como ser movido (o <select> de mover só existe dentro de um card já
- * visível). Só entram aqui contatos com stage_id null OU pertencente a uma
- * Stage deste pipeline — contatos de outro pipeline não aparecem em
- * nenhuma coluna deste board, nem em "Sem coluna". */
-export function KanbanBoard({ stages, contacts, onMove }: KanbanBoardProps) {
+ * visível). */
+export function KanbanBoard({ stages, contacts, onMove, onRenameStage, onDeleteStage, onAddContact }: KanbanBoardProps) {
   const unassigned = contacts.filter((c) => c.stage_id === null);
 
   return (
@@ -39,7 +40,16 @@ export function KanbanBoard({ stages, contacts, onMove }: KanbanBoardProps) {
       {stages.map((stage) => {
         const stageContacts = contacts.filter((c) => c.stage_id === stage.id);
         return (
-          <StageColumn key={stage.id} title={stage.name} count={stageContacts.length}>
+          <StageColumn
+            key={stage.id}
+            title={stage.name}
+            count={stageContacts.length}
+            color={stage.color}
+            stageId={stage.id}
+            onRename={onRenameStage}
+            onDelete={onDeleteStage}
+            onAddContact={onAddContact}
+          >
             {stageContacts.length === 0 ? (
               <p className="text-xs text-text-muted">Nenhum cliente nesta coluna.</p>
             ) : (

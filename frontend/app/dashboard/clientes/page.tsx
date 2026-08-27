@@ -2,7 +2,6 @@
 
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { useContacts } from "@/hooks/useContacts";
-import { BackLink } from "@/components/ui/BackLink";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { ContactForm } from "@/components/crm/ContactForm";
 import { ContactsTable } from "@/components/crm/ContactsTable";
@@ -32,10 +31,9 @@ export default function ClientesPage() {
   if (!ready) return null;
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8">
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-6 py-8">
       <div className="flex items-center justify-between">
         <div>
-          <BackLink href="/dashboard">← Dashboard</BackLink>
           <h1 className="font-heading text-2xl font-bold text-text-dark">Clientes</h1>
         </div>
         <button

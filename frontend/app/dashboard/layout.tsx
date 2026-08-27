@@ -1,5 +1,6 @@
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { TopBar } from "@/components/layout/TopBar";
 
 /** Layout aninhado do Next (app router) — aplicado a toda rota sob
  * /dashboard automaticamente, sem precisar repetir em cada page.tsx.
@@ -23,7 +24,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
        * Sidebar) em vez de travar na viewport. */}
       <div className="flex h-dvh overflow-hidden">
         <Sidebar />
-        <div className="flex flex-1 flex-col overflow-y-auto">{children}</div>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <TopBar />
+          <div className="flex flex-1 flex-col overflow-y-auto">{children}</div>
+        </div>
       </div>
     </ThemeProvider>
   );

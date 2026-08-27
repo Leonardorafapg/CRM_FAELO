@@ -52,7 +52,6 @@ SERVICE_ROUTES: dict[str, str] = {
     "tenants":   _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
     "users":     _service_url("PLATFORM_SERVICE_URL", "http://localhost:8001"),
 
-    "pipelines":        _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
     "stages":           _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
     "contact-statuses": _service_url("CRM_SERVICE_URL", "http://localhost:8002"),
     "contacts":         _service_url("CRM_SERVICE_URL", "http://localhost:8002"),

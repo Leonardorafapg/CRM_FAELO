@@ -1,25 +1,21 @@
 """Rotas de Stage — so parsing/roteamento HTTP. Regra de negocio em
-app/pipeline/service.py."""
+app/stages/service.py. Quadro unico e fixo por tenant (sem multi-pipeline):
+Stage e um recurso direto do tenant, sem aninhamento em nenhum path pai."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.pipeline import service
-from app.pipeline.schemas import StageCreate, StageUpdate
+from app.stages import service
+from app.stages.schemas import StageCreate, StageUpdate
 from shared.auth_deps import get_current_user
 from shared.policy import require_admin
 
-# Nao tem prefix proprio: /pipelines/{id}/stages (list/create) fica no
-# mesmo router de pipelines por semantica de URL, mas a logica mora aqui.
-# PATCH/DELETE de uma stage especifica usam /stages/{id} direto (nao
-# precisam do pipeline_id no path pra identificar o recurso).
-router = APIRouter(tags=["stages"])
+router = APIRouter(prefix="/stages", tags=["stages"])
 
 
 def _serialize(s) -> dict:
     return {
         "id": s.id,
-        "pipeline_id": s.pipeline_id,
         "name": s.name,
         "order": s.order,
         "color": s.color,
@@ -28,25 +24,24 @@ def _serialize(s) -> dict:
     }
 
 
-@router.get("/pipelines/{pipeline_id}/stages")
-def list_stages(pipeline_id: str, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    stages = service.list_stages(pipeline_id, current_user["tenant_id"], db)
+@router.get("")
+def list_stages(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    stages = service.list_stages(current_user["tenant_id"], db)
     return [_serialize(s) for s in stages]
 
 
-@router.post("/pipelines/{pipeline_id}/stages")
+@router.post("")
 def create_stage(
-    pipeline_id: str,
     body: StageCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
     _role: dict = Depends(require_admin),
 ):
-    stage = service.create_stage(pipeline_id, current_user["tenant_id"], body, db)
+    stage = service.create_stage(current_user["tenant_id"], body, db)
     return _serialize(stage)
 
 
-@router.patch("/stages/{stage_id}")
+@router.patch("/{stage_id}")
 def update_stage(
     stage_id: str,
     body: StageUpdate,
@@ -58,7 +53,7 @@ def update_stage(
     return _serialize(stage)
 
 
-@router.delete("/stages/{stage_id}")
+@router.delete("/{stage_id}")
 def delete_stage(
     stage_id: str,
     db: Session = Depends(get_db),

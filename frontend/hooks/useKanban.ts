@@ -3,46 +3,32 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   ApiError,
   Contact,
-  Pipeline,
   Stage,
-  createPipeline,
+  createContact,
   createStage,
+  deleteStage,
   listContacts,
-  listPipelines,
   listStages,
   updateContact,
+  updateStage,
 } from "@/lib/api";
 
-/** Quadro (pipeline) selecionado + suas colunas (stages) + os clientes de
- * cada coluna. Sem drag-and-drop nesta fase — mover é um select por card
- * (ver docs/features/CLIENTES_ESTAGIOS.md, "não introduzir biblioteca de
- * drag-and-drop nesta fase"). */
+/** Quadro unico e fixo por tenant (sem multi-pipeline, ver docs/TASKS.md) —
+ * so as Stages (colunas) sao configuraveis. Sem drag-and-drop nesta fase:
+ * mover é um select por card (ver docs/features/CLIENTES_ESTAGIOS.md, "não
+ * introduzir biblioteca de drag-and-drop nesta fase"). */
 export function useKanban() {
   const { user } = useAuth();
   const token = user?.access_token ?? "";
   const isAdmin = user?.role === "owner" || user?.role === "admin";
 
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadPipelines() {
-    const list = await listPipelines(token);
-    setPipelines(list);
-    if (list.length > 0) {
-      setSelectedPipelineId((current) => current ?? list.find((p) => p.is_default)?.id ?? list[0].id);
-    }
-    return list;
-  }
-
-  async function loadBoard(pipelineId: string) {
-    const [stageList, contactList] = await Promise.all([
-      listStages(token, pipelineId),
-      listContacts(token),
-    ]);
+  async function loadBoard() {
+    const [stageList, contactList] = await Promise.all([listStages(token), listContacts(token)]);
     setStages(stageList);
     setContacts(contactList);
   }
@@ -51,21 +37,11 @@ export function useKanban() {
     if (!token) return;
     setLoading(true);
     setError(null);
-    loadPipelines()
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Erro ao carregar quadros."))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  useEffect(() => {
-    if (!token || !selectedPipelineId) return;
-    setLoading(true);
-    setError(null);
-    loadBoard(selectedPipelineId)
+    loadBoard()
       .catch((err) => setError(err instanceof ApiError ? err.message : "Erro ao carregar quadro."))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedPipelineId]);
+  }, [token]);
 
   async function moveContact(contactId: string, stageId: string) {
     // Atualiza a UI antes da resposta do servidor (o card já muda de coluna
@@ -81,29 +57,52 @@ export function useKanban() {
     }
   }
 
-  async function handleCreatePipeline(name: string) {
-    const created = await createPipeline(token, { name });
-    setPipelines((prev) => [...prev, created]);
-    setSelectedPipelineId(created.id);
-  }
-
   async function handleCreateStage(name: string) {
-    if (!selectedPipelineId) return;
-    const created = await createStage(token, selectedPipelineId, { name });
+    const created = await createStage(token, { name });
     setStages((prev) => [...prev, created]);
   }
 
+  async function handleRenameStage(stageId: string, name: string) {
+    try {
+      const updated = await updateStage(token, stageId, { name });
+      setStages((prev) => prev.map((s) => (s.id === stageId ? updated : s)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Erro ao renomear coluna.");
+    }
+  }
+
+  async function handleDeleteStage(stageId: string) {
+    if (!window.confirm("Excluir esta coluna? Os clientes nela ficam sem coluna.")) return;
+    try {
+      await deleteStage(token, stageId);
+      setStages((prev) => prev.filter((s) => s.id !== stageId));
+      // Backend desvincula com ON DELETE SET NULL — reflete o mesmo aqui
+      // sem precisar recarregar a lista inteira de contacts.
+      setContacts((prev) => prev.map((c) => (c.stage_id === stageId ? { ...c, stage_id: null } : c)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Erro ao excluir coluna.");
+    }
+  }
+
+  async function handleCreateContact(stageId: string, name: string, phone: string) {
+    try {
+      const created = await createContact(token, { name, phone, stage_id: stageId });
+      setContacts((prev) => [created, ...prev]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Erro ao criar cliente.");
+    }
+  }
+
   return {
-    pipelines,
-    selectedPipelineId,
-    setSelectedPipelineId,
     stages,
     contacts,
     loading,
     error,
     isAdmin,
     moveContact,
-    handleCreatePipeline,
     handleCreateStage,
+    handleRenameStage,
+    handleDeleteStage,
+    handleCreateContact,
   };
 }

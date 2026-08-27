@@ -1,7 +1,7 @@
 """Rotas de Contact — so parsing/roteamento HTTP. Regra de negocio em
 app/contacts/service.py. CRUD completo aberto a qualquer usuario logado do
 tenant (inclusive attendant) — e trabalho operacional, nao configuracao
-(diferente de pipelines/stages/status, restritos a admin)."""
+(diferente de stages/status, restritos a admin)."""
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session

@@ -6,8 +6,8 @@ from app.db import Base
 
 class ContactStatus(Base):
     """Situacao geral do contato perante a empresa (ex.: Novo, Ativo,
-    Inadimplente) — configuravel por tenant, sem enum fixo. INDEPENDENTE de
-    Stage/Pipeline (posicao no funil): mudar status nunca muda a coluna do
+    Inadimplente) — configuravel por tenant, sem enum fixo. INDEPENDENTE da
+    Stage (posicao no quadro/Kanban): mudar status nunca muda a coluna do
     Kanban e vice-versa."""
     __tablename__ = "contact_statuses"
 

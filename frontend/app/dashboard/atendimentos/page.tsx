@@ -212,7 +212,7 @@ export default function AtendimentosPage() {
           }`}
         >
           <div className="shrink-0 border-b border-border-light px-4 py-3">
-            <BackLink href="/dashboard">← Dashboard</BackLink>
+            <BackLink href="/dashboard">Dashboard</BackLink>
             <h1 className="mt-1 font-heading text-lg font-bold text-text-dark">Atendimentos</h1>
           </div>
 

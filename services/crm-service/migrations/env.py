@@ -12,7 +12,7 @@ load_dotenv()  # nao usa override=True: main.py ja carregou .env antes de chamar
 from app.db import Base
 # Todo modulo que define tabela precisa ser importado aqui — e o ato de
 # importar que registra as classes em Base.metadata.
-from app.pipeline import models as _pipeline_models    # noqa: F401  Pipeline, Stage
+from app.stages import models as _stage_models         # noqa: F401  Stage
 from app.contacts import models as _contacts_models    # noqa: F401  Contact, ContactStatus
 
 config = context.config

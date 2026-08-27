@@ -9,7 +9,6 @@ from shared.logging_config import setup_logging, get_logger, set_request_id, res
 setup_logging("crm-service")
 logger = get_logger("crm-service")
 
-from app.routers.pipelines import router as pipelines_router
 from app.routers.stages import router as stages_router
 from app.routers.contact_statuses import router as contact_statuses_router
 from app.routers.contacts import router as contacts_router
@@ -85,7 +84,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-app.include_router(pipelines_router)
 app.include_router(stages_router)
 app.include_router(contact_statuses_router)
 app.include_router(contacts_router)

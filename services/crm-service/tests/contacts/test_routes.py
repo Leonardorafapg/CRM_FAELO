@@ -13,7 +13,7 @@ def _tenant() -> str:
 
 def test_criar_e_listar_contact_como_attendant(client: TestClient):
     """CRUD de contact e operacional — aberto a attendant, diferente de
-    pipelines/stages/status (config, restritos a admin)."""
+    stages/status (config, restritos a admin)."""
     tenant = _tenant()
     headers = auth_headers(tenant, UserRole.attendant)
 
@@ -48,9 +48,8 @@ def test_isolamento_multi_tenant_em_contacts(client: TestClient):
 def test_mover_contact_no_kanban_via_patch(client: TestClient):
     tenant = _tenant()
     headers = auth_headers(tenant, UserRole.attendant)
-    pipeline_id = client.post("/pipelines", json={"name": "Vendas"}, headers=auth_headers(tenant, UserRole.owner)).json()["id"]
     stage_id = client.post(
-        f"/pipelines/{pipeline_id}/stages", json={"name": "Proposta"}, headers=auth_headers(tenant, UserRole.owner)
+        "/stages", json={"name": "Proposta"}, headers=auth_headers(tenant, UserRole.owner)
     ).json()["id"]
     contact_id = client.post("/contacts", json={"name": "Carlos", "phone": "11999999999"}, headers=headers).json()["id"]
 
@@ -62,9 +61,8 @@ def test_mover_contact_no_kanban_via_patch(client: TestClient):
 def test_filtrar_contacts_por_stage(client: TestClient):
     tenant = _tenant()
     headers = auth_headers(tenant, UserRole.owner)
-    pipeline_id = client.post("/pipelines", json={"name": "Vendas"}, headers=headers).json()["id"]
-    stage_a = client.post(f"/pipelines/{pipeline_id}/stages", json={"name": "Entrada"}, headers=headers).json()["id"]
-    stage_b = client.post(f"/pipelines/{pipeline_id}/stages", json={"name": "Proposta"}, headers=headers).json()["id"]
+    stage_a = client.post("/stages", json={"name": "Entrada"}, headers=headers).json()["id"]
+    stage_b = client.post("/stages", json={"name": "Proposta"}, headers=headers).json()["id"]
     client.post("/contacts", json={"name": "A", "phone": "1", "stage_id": stage_a}, headers=headers)
     client.post("/contacts", json={"name": "B", "phone": "2", "stage_id": stage_b}, headers=headers)
 
