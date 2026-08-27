@@ -209,49 +209,59 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
         return
 
     imported_messages = 0
-    for chat in chats[:chats_limit]:
-        remote_jid = chat.get("remoteJid") or chat.get("id") or ""
-        if not remote_jid or remote_jid.endswith("@g.us"):
-            continue  # grupos ficam de fora nesta fase — so conversas 1:1, mesmo escopo do resto do atendimento
+    try:
+        for chat in chats[:chats_limit]:
+            remote_jid = chat.get("remoteJid") or chat.get("id") or ""
+            if not remote_jid or remote_jid.endswith("@g.us"):
+                continue  # grupos ficam de fora nesta fase — so conversas 1:1, mesmo escopo do resto do atendimento
 
-        phone = remote_jid.split("@")[0]
-        contact_name = chat.get("pushName") or chat.get("name")
-        session = _get_or_create_session_quiet(connection.tenant_id, connection.id, phone, contact_name, db)
-        db.flush()  # garante id da Session persistido antes do insert de Message com FK
+            phone = remote_jid.split("@")[0]
+            contact_name = chat.get("pushName") or chat.get("name")
+            session = _get_or_create_session_quiet(connection.tenant_id, connection.id, phone, contact_name, db)
+            db.flush()  # garante id da Session persistido antes do insert de Message com FK
 
-        try:
-            messages = await evolution_client.find_messages(connection.instance_name, remote_jid, limit=messages_per_chat)
-        except Exception:
-            logger.exception(f"Falha ao importar mensagens do chat {remote_jid}")
-            continue
-
-        new_in_chat = 0
-        for raw in messages:
-            fields = evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
-            if not fields["message_id"]:
-                continue  # nao e uma mensagem de verdade (ex.: evento sem key.id) — content nunca fica
-                          # vazio quando message_id existe (ver extract_message_fields), entao so isso
-                          # ja cobre "descartar mensagem de midia" que existia aqui antes
-            existing = db.query(Message).filter(Message.evolution_message_id == fields["message_id"]).first()
-            if existing:
+            try:
+                messages = await evolution_client.find_messages(connection.instance_name, remote_jid, limit=messages_per_chat)
+            except Exception:
+                logger.exception(f"Falha ao importar mensagens do chat {remote_jid}")
                 continue
-            db.add(Message(
-                id=_new_id(),
-                session_id=session.id,
-                role=fields["role"],
-                content=fields["content"],
-                evolution_message_id=fields["message_id"],
-            ))
-            new_in_chat += 1
 
-        # So bumpa last_activity se de fato entrou mensagem nova nesta
-        # importacao — revisitar uma conversa ja totalmente importada nao
-        # pode fazer ela pular pro topo do inbox sem motivo real.
-        if new_in_chat > 0:
-            session.last_activity = datetime.now(timezone.utc)
-        imported_messages += new_in_chat
+            new_in_chat = 0
+            for raw in messages:
+                fields = evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
+                if not fields["message_id"]:
+                    continue  # nao e uma mensagem de verdade (ex.: evento sem key.id) — content nunca fica
+                              # vazio quando message_id existe (ver extract_message_fields), entao so isso
+                              # ja cobre "descartar mensagem de midia" que existia aqui antes
+                existing = db.query(Message).filter(Message.evolution_message_id == fields["message_id"]).first()
+                if existing:
+                    continue
+                db.add(Message(
+                    id=_new_id(),
+                    session_id=session.id,
+                    role=fields["role"],
+                    content=fields["content"],
+                    evolution_message_id=fields["message_id"],
+                ))
+                new_in_chat += 1
 
-    db.commit()
+            # So bumpa last_activity se de fato entrou mensagem nova nesta
+            # importacao — revisitar uma conversa ja totalmente importada nao
+            # pode fazer ela pular pro topo do inbox sem motivo real.
+            if new_in_chat > 0:
+                session.last_activity = datetime.now(timezone.utc)
+            imported_messages += new_in_chat
+
+        db.commit()
+    except Exception:
+        # Erro de banco (conexao caiu, etc.) durante o import nao pode
+        # derrubar o GET /connections inteiro — reflete o mesmo "best-effort"
+        # ja documentado acima, que ate aqui so cobria as chamadas a
+        # Evolution, nao a escrita no banco.
+        db.rollback()
+        logger.exception(f"Falha ao persistir historico importado da instancia {connection.instance_name}")
+        return
+
     logger.info(
         f"Historico importado: tenant={connection.tenant_id} instance={connection.instance_name} "
         f"chats={len(chats)} mensagens={imported_messages}"
