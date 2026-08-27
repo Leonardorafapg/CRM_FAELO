@@ -27,7 +27,7 @@ export async function request<T>(path: string, body: unknown): Promise<T> {
  * aceita qualquer verbo HTTP, nao so POST. Corpo e opcional (GET/DELETE
  * geralmente nao mandam body). */
 export async function authRequest<T>(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   token: string,
   body?: unknown

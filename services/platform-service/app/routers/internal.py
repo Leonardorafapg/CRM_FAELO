@@ -17,19 +17,33 @@ router = APIRouter(prefix="/internal/tenants", tags=["internal"], dependencies=[
 
 @router.get("/{tenant_id}")
 def get_tenant_internal(tenant_id: str, db: Session = Depends(get_db)):
-    """Config completa do tenant, incluindo groq_key em TEXTO PURO (diferente
-    do GET publico em routers/tenants.py, que so devolve um booleano) — uso
-    exclusivo do conversation-service pra montar o system prompt e chamar o
-    LLM em nome do tenant."""
+    """Config completa do tenant, incluindo ai_api_key em TEXTO PURO
+    (diferente do GET publico em routers/tenants.py, que so devolve um
+    booleano) — uso exclusivo do ai-service pra montar o system prompt e
+    chamar o LLM em nome do tenant (ver ai-service/app/llm/base.py::
+    build_system_prompt)."""
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.is_active == True).first()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant não encontrado ou inativo")
     return {
         "id":               tenant.id,
         "business_name":    tenant.business_name,
+        "phone":            tenant.phone,
+        "email":            tenant.email,
+        "city":             tenant.city,
+        "address":          tenant.address,
+        "whatsapp":         tenant.whatsapp,
+        "instagram":        tenant.instagram,
+        "facebook":         tenant.facebook,
+        "website":          tenant.website,
         "system_prompt":    tenant.system_prompt,
         "fallback_message": tenant.fallback_message,
         "ai_provider":      tenant.ai_provider,
-        "groq_key":         tenant.groq_key,
-        "openrouter_model": tenant.openrouter_model,
+        "ai_api_key":       tenant.ai_api_key,
+        "ai_model":         tenant.ai_model,
+        "faq_enabled":      tenant.faq_enabled,
+        "business_hours": [
+            {"day_of_week": h.day_of_week, "slots": h.slots or [], "is_closed": h.is_closed}
+            for h in tenant.business_hours
+        ],
     }

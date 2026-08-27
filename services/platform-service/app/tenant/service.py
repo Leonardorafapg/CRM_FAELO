@@ -21,9 +21,9 @@ def get_or_404(tenant_id: str, db: Session) -> Tenant:
 
 
 def serialize_tenant(tenant: Tenant) -> dict:
-    """Note que groq_key vira bool(tenant.groq_key), NUNCA o valor real da
-    chave. So o endpoint interno (routers/internal.py) devolve a chave em
-    texto puro, pra consumo do conversation-service."""
+    """Note que ai_api_key vira bool(tenant.ai_api_key), NUNCA o valor real
+    da chave. So o endpoint interno (routers/internal.py) devolve a chave em
+    texto puro, pra consumo do ai-service."""
     return {
         "id":            tenant.id,
         "business_name": tenant.business_name,
@@ -39,7 +39,9 @@ def serialize_tenant(tenant: Tenant) -> dict:
         "system_prompt": tenant.system_prompt,
         "fallback_message": tenant.fallback_message,
         "ai_provider":   tenant.ai_provider,
-        "groq_key":      bool(tenant.groq_key),
+        "ai_model":      tenant.ai_model,
+        "ai_api_key":    bool(tenant.ai_api_key),
+        "faq_enabled":   tenant.faq_enabled,
         "is_active":     tenant.is_active,
     }
 
@@ -51,7 +53,7 @@ def list_tenants(db: Session) -> list[dict]:
 def update_tenant(tenant_id: str, body: TenantUpdateBody, db: Session) -> None:
     tenant = get_or_404(tenant_id, db)
     for field, value in body.model_dump(exclude_unset=True).items():
-        if field == "groq_key":
+        if field == "ai_api_key":
             # So sobrescreve a chave real se vier uma STRING nao vazia —
             # protege contra o front reenviar o booleano do GET por engano
             # e apagar a chave ja salva.

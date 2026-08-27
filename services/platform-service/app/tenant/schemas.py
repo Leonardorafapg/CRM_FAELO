@@ -20,9 +20,10 @@ class TenantUpdateBody(BaseModel):
     website:          Optional[str] = None
     system_prompt:    Optional[str] = None
     fallback_message: Optional[str] = None
-    ai_provider:      Optional[Literal["groq", "openrouter"]] = None
-    openrouter_model: Optional[str] = None
+    ai_provider:      Optional[Literal["deepseek"]] = None  # so deepseek por enquanto — mais providers entram depois
+    ai_model:         Optional[str] = None
+    faq_enabled:      Optional[bool] = None
     # Segredo: o GET devolve um booleano ("existe chave?"), entao o front pode
     # reenviar esse bool sem querer. Aceita bool aqui pra nao rejeitar o PATCH
     # inteiro com 422 — o service so aplica de fato quando vier string nao vazia.
-    groq_key:         Optional[Union[str, bool]] = None
+    ai_api_key:       Optional[Union[str, bool]] = None

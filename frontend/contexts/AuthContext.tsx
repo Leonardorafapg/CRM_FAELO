@@ -59,3 +59,12 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
+
+/** Mesma regra usada pelo backend (shared/policy.py::require_admin e
+ * require_role): platform admin (is_admin) sempre passa, independente do
+ * role dentro do tenant; senao, precisa ser owner ou admin. Centralizado
+ * aqui pra nao reimplementar essa checagem em cada tela/hook restrito. */
+export function isAdminOrOwner(user: AuthResponse | null): boolean {
+  if (!user) return false;
+  return user.is_admin || user.role === "owner" || user.role === "admin";
+}

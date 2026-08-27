@@ -22,14 +22,14 @@ def test_get_or_404_com_tenant_inexistente_levanta_404(db: Session):
     assert exc.value.status_code == 404
 
 
-def test_serialize_tenant_nunca_expoe_groq_key_em_texto(db: Session):
+def test_serialize_tenant_nunca_expoe_ai_api_key_em_texto(db: Session):
     user = _register(db, "tenantserialize@teste.com")
     tenant = service.get_or_404(user.tenant_id, db)
-    tenant.groq_key = "chave-secreta-de-verdade"
+    tenant.ai_api_key = "chave-secreta-de-verdade"
     db.commit()
 
     data = service.serialize_tenant(tenant)
-    assert data["groq_key"] is True  # so booleano, nunca o valor
+    assert data["ai_api_key"] is True  # so booleano, nunca o valor
     assert "chave-secreta-de-verdade" not in str(data)
 
 
@@ -40,25 +40,25 @@ def test_update_tenant_atualiza_campo_simples(db: Session):
     assert tenant.business_name == "Novo Nome"
 
 
-def test_update_tenant_nao_sobrescreve_groq_key_com_booleano(db: Session):
+def test_update_tenant_nao_sobrescreve_ai_api_key_com_booleano(db: Session):
     """Protecao critica (SECURITY.md): o front pode reenviar o booleano do
     GET por engano — nao pode apagar a chave real salva."""
     user = _register(db, "tenantgroqkey@teste.com")
     tenant = service.get_or_404(user.tenant_id, db)
-    tenant.groq_key = "chave-original"
+    tenant.ai_api_key = "chave-original"
     db.commit()
 
-    service.update_tenant(user.tenant_id, TenantUpdateBody(groq_key=True), db)
+    service.update_tenant(user.tenant_id, TenantUpdateBody(ai_api_key=True), db)
 
     db.refresh(tenant)
-    assert tenant.groq_key == "chave-original"
+    assert tenant.ai_api_key == "chave-original"
 
 
-def test_update_tenant_aplica_groq_key_quando_string_nao_vazia(db: Session):
+def test_update_tenant_aplica_ai_api_key_quando_string_nao_vazia(db: Session):
     user = _register(db, "tenantgroqkey2@teste.com")
-    service.update_tenant(user.tenant_id, TenantUpdateBody(groq_key="nova-chave"), db)
+    service.update_tenant(user.tenant_id, TenantUpdateBody(ai_api_key="nova-chave"), db)
     tenant = service.get_or_404(user.tenant_id, db)
-    assert tenant.groq_key == "nova-chave"
+    assert tenant.ai_api_key == "nova-chave"
 
 
 def test_deactivate_tenant_marca_is_active_false(db: Session):

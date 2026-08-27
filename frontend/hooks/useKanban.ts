@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { isAdminOrOwner, useAuth } from "@/contexts/AuthContext";
 import {
   ApiError,
   Contact,
@@ -20,7 +20,7 @@ import {
 export function useKanban() {
   const { user } = useAuth();
   const token = user?.access_token ?? "";
-  const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const isAdmin = isAdminOrOwner(user);
 
   const [stages, setStages] = useState<Stage[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);

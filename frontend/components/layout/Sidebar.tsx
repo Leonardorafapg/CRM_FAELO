@@ -11,6 +11,7 @@ import {
   IconKanban,
   IconPlug,
   IconChat,
+  IconSettings,
   IconSun,
   IconMoon,
   IconLogout,
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/quadros", label: "Quadros", Icon: IconKanban },
   { href: "/dashboard/conexoes", label: "Conexões", Icon: IconPlug },
   { href: "/dashboard/atendimentos", label: "Atendimentos", Icon: IconChat },
+  { href: "/dashboard/configuracoes", label: "Configurações", Icon: IconSettings },
 ];
 
 const COLLAPSED_KEY = "faelo_sidebar_collapsed";

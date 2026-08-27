@@ -21,7 +21,7 @@ def test_get_tenant_do_proprio_tenant(client: TestClient):
     auth = _register(client, "tenantrota@teste.com", "Rota Tenant")
     resp = client.get(f"/tenants/{auth['tenant_id']}", headers=_headers(auth["access_token"]))
     assert resp.status_code == 200
-    assert resp.json()["groq_key"] is False
+    assert resp.json()["ai_api_key"] is False
 
 
 def test_get_tenant_de_outro_tenant_retorna_403(client: TestClient):

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
-import { useAuth } from "@/contexts/AuthContext";
+import { isAdminOrOwner, useAuth } from "@/contexts/AuthContext";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { IconDevice } from "@/components/layout/icons";
 import {
@@ -12,13 +12,6 @@ import {
   deleteConnection,
   ApiError,
 } from "@/lib/whatsapp";
-
-// Sem helper pronto de "e admin/owner?" no projeto — replica aqui a mesma
-// checagem simples usada em outras telas restritas.
-function isAdminOrOwner(user: { role: string; is_admin: boolean } | null): boolean {
-  if (!user) return false;
-  return user.is_admin || user.role === "owner" || user.role === "admin";
-}
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";

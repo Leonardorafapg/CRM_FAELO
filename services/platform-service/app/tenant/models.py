@@ -22,13 +22,20 @@ class Tenant(Base):
     facebook       = Column(String, nullable=True)
     website        = Column(String, nullable=True)
     is_active      = Column(Boolean, default=True)  # False = tenant desativado (ex.: por admin) — bloqueia login
-    # Config do bot/IA — consumida pelo conversation-service via chamada HTTP
-    # interna (GET /internal/tenants/{id}), nao replicada em banco proprio.
+    # Config do bot/IA — consumida pelo ai-service via chamada HTTP interna
+    # (GET /internal/tenants/{id}), nao replicada em banco proprio. Nomes
+    # genericos de proposito (nao amarrados a um provider especifico): troca
+    # de provider e so mudar `ai_provider`, sem renomear coluna.
     system_prompt     = Column(Text, nullable=True)    # instrucoes extras pro LLM, definidas pelo tenant
     fallback_message  = Column(Text, nullable=True)    # resposta padrao quando a IA nao sabe responder
-    ai_provider       = Column(String, default="groq")  # "groq" ou "openrouter" — qual provedor de LLM usar
-    groq_key          = Column(String, nullable=True)   # chave de API do tenant (texto puro aqui; GET publico so expoe bool)
-    openrouter_model  = Column(String, nullable=True)   # modelo especifico, se ai_provider="openrouter"
+    ai_provider       = Column(String, nullable=False, default="deepseek", server_default="deepseek")  # "deepseek" por enquanto — outros providers entram depois
+    ai_api_key        = Column(String, nullable=True)   # chave do provider configurado (texto puro aqui; GET publico so expoe bool)
+    ai_model          = Column(String, nullable=True)    # modelo especifico do provider, se o tenant quiser sobrescrever o default
+    # Libera a resposta automatica por FAQ/system_prompt (ai-service consulta
+    # isso antes de responder). Sem crm_enabled aqui de proposito — vincular
+    # conversa a Contact automaticamente esta fora de escopo nesta fase (ver
+    # docs/features/WHATSAPP_SERVICE.md).
+    faq_enabled       = Column(Boolean, nullable=False, default=True, server_default="true")
     created_at     = Column(DateTime, server_default=func.now())
     updated_at     = Column(DateTime, onupdate=func.now())
 

@@ -64,6 +64,11 @@ SERVICE_ROUTES: dict[str, str] = {
     "webhook":     _service_url("WHATSAPP_SERVICE_URL", "http://localhost:8003"),
     "sessoes":     _service_url("WHATSAPP_SERVICE_URL", "http://localhost:8003"),
     "chat":        _service_url("WHATSAPP_SERVICE_URL", "http://localhost:8003"),
+
+    # ai-service: FAQ/base de conhecimento por enquanto (ver /ai/settings,
+    # /ai/faq) — outras funcionalidades (agendamento, etc.) entram sob o
+    # mesmo prefixo "ai" conforme forem implementadas.
+    "ai": _service_url("AI_SERVICE_URL", "http://localhost:8004"),
 }
 
 # Headers que NAO devem ser repassados adiante — sao especificos da conexao
