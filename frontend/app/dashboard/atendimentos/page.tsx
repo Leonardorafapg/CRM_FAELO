@@ -23,6 +23,41 @@ import {
 // mensagem antiga, uma mensagem nova nao deve arrastar a tela sozinha.
 const SCROLL_BOTTOM_THRESHOLD = 150;
 
+function mesmoDia(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function formatHora(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+// Mesmo padrao do WhatsApp: "Hoje"/"Ontem" pros dias recentes, data por
+// extenso pros demais — separador exibido entre mensagens de dias diferentes.
+function formatDiaSeparador(iso: string | null): string {
+  if (!iso) return "";
+  const data = new Date(iso);
+  const hoje = new Date();
+  const ontem = new Date();
+  ontem.setDate(hoje.getDate() - 1);
+  if (mesmoDia(data, hoje)) return "Hoje";
+  if (mesmoDia(data, ontem)) return "Ontem";
+  return data.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+// Versao curta pra lista de conversas (mesmo padrao do WhatsApp: hora se foi
+// hoje, "Ontem" se foi ontem, data curta caso contrario).
+function formatListaHorario(iso: string | null): string {
+  if (!iso) return "";
+  const data = new Date(iso);
+  const hoje = new Date();
+  const ontem = new Date();
+  ontem.setDate(hoje.getDate() - 1);
+  if (mesmoDia(data, hoje)) return formatHora(iso);
+  if (mesmoDia(data, ontem)) return "Ontem";
+  return data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
+
 export default function AtendimentosPage() {
   const ready = useRequireAuth();
   const { user } = useAuth();
@@ -178,11 +213,14 @@ export default function AtendimentosPage() {
                       }`}
                     >
                       <Avatar name={s.contact_name || s.phone} photoUrl={s.foto_url} size={36} />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-text-dark">{s.contact_name || s.phone}</p>
                         <p className="truncate text-text-muted">{s.phone}</p>
                         {!s.is_open && <p className="text-xs text-text-muted">Encerrado</p>}
                       </div>
+                      <span className="shrink-0 self-start text-xs text-text-muted">
+                        {formatListaHorario(s.last_activity)}
+                      </span>
                     </button>
                   </li>
                 ))}
@@ -226,18 +264,40 @@ export default function AtendimentosPage() {
                 onScroll={handleScrollThread}
                 className="flex-1 space-y-2 overflow-y-auto p-4"
               >
-                {mensagens.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
-                      m.role === "attendant"
-                        ? "ml-auto bg-accent-blue text-white"
-                        : "bg-card-bg text-text-dark"
-                    }`}
-                  >
-                    {m.content}
-                  </div>
-                ))}
+                {mensagens.map((m, i) => {
+                  const anterior = mensagens[i - 1];
+                  const mostraSeparador =
+                    m.created_at &&
+                    (!anterior?.created_at || !mesmoDia(new Date(m.created_at), new Date(anterior.created_at)));
+
+                  return (
+                    <div key={m.id}>
+                      {mostraSeparador && (
+                        <div className="my-3 flex justify-center">
+                          <span className="rounded-full bg-card-bg px-3 py-1 text-xs text-text-muted shadow-sm">
+                            {formatDiaSeparador(m.created_at)}
+                          </span>
+                        </div>
+                      )}
+                      <div
+                        className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                          m.role === "attendant"
+                            ? "ml-auto bg-accent-blue text-white"
+                            : "bg-card-bg text-text-dark"
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                        <p
+                          className={`mt-1 text-right text-[10px] ${
+                            m.role === "attendant" ? "text-white/70" : "text-text-muted"
+                          }`}
+                        >
+                          {formatHora(m.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
                 <div ref={endRef} />
               </div>
 
