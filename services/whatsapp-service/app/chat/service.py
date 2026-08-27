@@ -245,6 +245,14 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
         logger.exception(f"Falha ao importar historico da instancia {connection.instance_name}")
         return
 
+    try:
+        contacts_map = evolution_client.build_contact_name_map(
+            await evolution_client.find_contacts(connection.instance_name)
+        )
+    except Exception:
+        logger.exception(f"Falha ao importar contatos da instancia {connection.instance_name}")
+        contacts_map = {}
+
     imported_messages = 0
     try:
         for chat in chats[:chats_limit]:
@@ -253,7 +261,12 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
                 continue  # grupos ficam de fora nesta fase — so conversas 1:1, mesmo escopo do resto do atendimento
 
             phone = remote_jid.split("@")[0]
-            contact_name = chat.get("pushName") or chat.get("name")
+            # find_contacts (agenda) e a fonte mais confiavel de nome pra
+            # historico — ver evolution_client.find_contacts. find_chats
+            # normalmente nao traz pushName/name nenhum, entao chat.get(...)
+            # quase sempre fica None; mantido so como fallback caso alguma
+            # versao da Evolution devolva.
+            contact_name = contacts_map.get(phone) or chat.get("pushName") or chat.get("name")
             session = _get_or_create_session_quiet(connection.tenant_id, connection.id, phone, contact_name, db)
             db.flush()  # garante id da Session persistido antes do insert de Message com FK
 

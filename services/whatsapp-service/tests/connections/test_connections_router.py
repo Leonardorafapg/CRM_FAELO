@@ -106,6 +106,7 @@ def test_list_connections_atualiza_status_para_connected_e_importa_historico(cli
 
     with patch("app.connections.service.evolution_client.get_instance_status", status_mock), \
          patch("app.evolution.client.find_chats", chats_mock), \
+         patch("app.evolution.client.find_contacts", AsyncMock(return_value=[])), \
          patch("app.evolution.client.find_messages", messages_mock):
         resp = client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
 
@@ -148,6 +149,7 @@ def test_import_historico_nao_descarta_mensagem_de_midia(client, db):
 
     with patch("app.connections.service.evolution_client.get_instance_status", status_mock), \
          patch("app.evolution.client.find_chats", chats_mock), \
+         patch("app.evolution.client.find_contacts", AsyncMock(return_value=[])), \
          patch("app.evolution.client.find_messages", messages_mock):
         client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
 
@@ -163,6 +165,35 @@ def test_import_historico_nao_descarta_mensagem_de_midia(client, db):
     assert "[Áudio]" in contents
 
 
+def test_import_historico_usa_find_contacts_pra_nome_sem_mensagem_recebida(client, db):
+    """find_chats normalmente nao traz pushName/name (so metadado de chat) e
+    o historico de mensagens pode nao ter nenhuma recebida do contato ainda
+    (ex.: so mensagens enviadas por nos) — nesses casos so find_contacts
+    (agenda) tem o nome. Ver evolution_client.find_contacts/build_contact_name_map
+    e chat.service.import_history."""
+    tenant_id = str(uuid.uuid4())
+    conn = Connection(id=str(uuid.uuid4()), tenant_id=tenant_id, instance_name="inst-connecting", status="connecting")
+    db.add(conn)
+    db.commit()
+
+    status_mock = AsyncMock(return_value={"instance": {"state": "open"}})
+    chats_mock = AsyncMock(return_value=[{"remoteJid": "5511999999999@s.whatsapp.net"}])
+    contacts_mock = AsyncMock(return_value=[{"id": "5511999999999@s.whatsapp.net", "pushName": "Cliente da Agenda"}])
+    messages_mock = AsyncMock(return_value=[
+        {"key": {"id": "MSG1", "remoteJid": "5511999999999@s.whatsapp.net", "fromMe": True},
+         "message": {"conversation": "Oi, tudo bem?"}},
+    ])
+
+    with patch("app.connections.service.evolution_client.get_instance_status", status_mock), \
+         patch("app.evolution.client.find_chats", chats_mock), \
+         patch("app.evolution.client.find_contacts", contacts_mock), \
+         patch("app.evolution.client.find_messages", messages_mock):
+        client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
+
+    sessoes = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
+    assert sessoes[0]["contact_name"] == "Cliente da Agenda"
+
+
 def test_list_connections_ja_conectada_nao_chama_get_instance_status(client, db):
     """Conexao ja "connected" nao precisa consultar o estado de novo (nao
     muda), mas ainda reimporta o historico a cada listagem (ver teste
@@ -175,7 +206,8 @@ def test_list_connections_ja_conectada_nao_chama_get_instance_status(client, db)
 
     status_mock = AsyncMock(return_value={"instance": {"state": "open"}})
     with patch("app.connections.service.evolution_client.get_instance_status", status_mock), \
-         patch("app.evolution.client.find_chats", AsyncMock(return_value=[])):
+         patch("app.evolution.client.find_chats", AsyncMock(return_value=[])), \
+         patch("app.evolution.client.find_contacts", AsyncMock(return_value=[])):
         resp = client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
 
     assert resp.status_code == 200
@@ -203,7 +235,9 @@ def test_list_connections_nao_reimporta_historico_dentro_do_cooldown(client, db)
          "message": {"conversation": "Oi, tudo bem?"}},
     ])
 
-    with patch("app.evolution.client.find_chats", chats_mock), patch("app.evolution.client.find_messages", messages_mock):
+    with patch("app.evolution.client.find_chats", chats_mock), \
+         patch("app.evolution.client.find_contacts", AsyncMock(return_value=[])), \
+         patch("app.evolution.client.find_messages", messages_mock):
         client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
         first = client.get("/sessoes?limit=50&offset=0", headers=auth_headers(tenant_id, UserRole.attendant)).json()
 
@@ -237,7 +271,9 @@ def test_list_connections_reimporta_apos_cooldown_sem_duplicar(client, db):
          "message": {"conversation": "Oi, tudo bem?"}},
     ])
 
-    with patch("app.evolution.client.find_chats", chats_mock), patch("app.evolution.client.find_messages", messages_mock):
+    with patch("app.evolution.client.find_chats", chats_mock), \
+         patch("app.evolution.client.find_contacts", AsyncMock(return_value=[])), \
+         patch("app.evolution.client.find_messages", messages_mock):
         client.get("/connections", headers=auth_headers(tenant_id, UserRole.attendant))
 
         connections_service._last_resync.pop(conn.id, None)  # simula o cooldown ja tendo passado

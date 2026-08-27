@@ -174,6 +174,52 @@ async def find_chats(instance_name: str) -> list[dict]:
     return data.get("chats", []) if isinstance(data, dict) else []
 
 
+async def find_contacts(instance_name: str) -> list[dict]:
+    """Agenda de contatos do numero conectado — diferente de find_chats
+    (que lista conversas, so metadado de chat) e diferente do pushName por
+    mensagem (que so vem em mensagens recebidas AO VIVO via webhook, nao
+    fica garantido no historico devolvido por find_messages — mesmo
+    problema que o projeto de referencia Foodapp contorna nunca tentando
+    importar nome de historico, so via webhook). find_contacts e a unica
+    fonte que pode ter o nome de um contato mesmo sem nenhuma mensagem dele
+    no historico importado. Best-effort, mesmo padrao de find_chats."""
+    client = get_async_client()
+    try:
+        resp = await client.post(
+            f"{EVOLUTION_API_URL}/chat/findContacts/{instance_name}",
+            headers=_headers(),
+            json={},
+            timeout=_ENRICHMENT_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except httpx.HTTPError as e:
+        logger.error(f"Falha ao listar contatos da instancia {instance_name}: {type(e).__name__}: {e}", exc_info=True)
+        return []
+    if isinstance(data, list):
+        return data
+    return data.get("contacts", []) if isinstance(data, dict) else []
+
+
+def build_contact_name_map(contacts: list[dict]) -> dict[str, str]:
+    """Telefone (sem @s.whatsapp.net) -> nome, a partir do retorno de
+    find_contacts. Shape exato do contato varia entre versoes da Evolution
+    (id/remoteJid, pushName/name) — mesmo tratamento tolerante do resto do
+    client. Contato sem nome nao entra no mapa."""
+    result: dict[str, str] = {}
+    for contact in contacts:
+        if not isinstance(contact, dict):
+            continue
+        jid = contact.get("id") or contact.get("remoteJid") or ""
+        if not jid or jid.endswith("@g.us"):
+            continue
+        phone = jid.split("@")[0]
+        name = contact.get("pushName") or contact.get("name") or contact.get("notify")
+        if name and phone not in result:
+            result[phone] = name
+    return result
+
+
 def _unwrap_messages_page(data) -> list[dict]:
     if isinstance(data, list):
         return data
