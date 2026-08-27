@@ -16,6 +16,7 @@ import {
   whatsappWsUrl,
   ApiError,
 } from "@/lib/whatsapp";
+import { getCachedSessoes } from "@/lib/sessoesCache";
 
 // Distancia (em px) do fundo da thread pra considerar "perto o suficiente" e
 // auto-rolar quando chega mensagem nova — mesmo padrao do WhatsappChat.tsx
@@ -86,6 +87,13 @@ export default function AtendimentosPage() {
 
   useEffect(() => {
     if (!ready || !user) return;
+    // Pinta com o que o AuthContext ja deixou em voo/pronto no login (ver
+    // lib/sessoesCache.ts) pra evitar tela vazia esperando uma chamada nova
+    // — e sempre revalida com refreshSessoes logo em seguida.
+    const cached = getCachedSessoes(user.tenant_id);
+    if (cached) {
+      cached.then(setSessoes).catch(() => {});
+    }
     refreshSessoes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);

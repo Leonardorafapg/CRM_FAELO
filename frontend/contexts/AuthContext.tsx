@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { AuthResponse } from "@/lib/api";
 import { loadSession, saveSession, clearSession } from "@/lib/auth";
+import { prefetchSessoes } from "@/lib/sessoesCache";
 
 type AuthContextValue = {
   user: AuthResponse | null;
@@ -24,6 +25,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(loadSession());
     setIsLoading(false);
   }, []);
+
+  // Dispara a busca das conversas assim que a sessao esta disponivel — no
+  // login e tambem na reidratacao do localStorage (refresh de pagina) —
+  // pra ja estar pronta (ou em voo) quando o usuario chega em
+  // /dashboard/atendimentos, em vez de so comecar a buscar nesse momento.
+  // Ver lib/sessoesCache.ts.
+  useEffect(() => {
+    if (user) prefetchSessoes(user.tenant_id, user.access_token);
+  }, [user]);
 
   function login(auth: AuthResponse) {
     saveSession(auth);

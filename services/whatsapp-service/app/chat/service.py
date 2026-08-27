@@ -16,6 +16,18 @@ from shared.logging_config import get_logger
 
 logger = get_logger("whatsapp-service")
 
+# Orcamento total pra busca de fotos de perfil dentro de GET /sessoes. A
+# query no banco (indexada por tenant_id+last_activity) e rapida — o que
+# deixava a listagem lenta era esperar, em serie com a resposta HTTP, ate
+# 50 chamadas em paralelo pra Evolution (ate 5s de timeout cada, ver
+# _ENRICHMENT_TIMEOUT) toda vez que o cache de foto expirava (6h) ou era
+# a primeira listagem do tenant. Com esse orcamento, a listagem devolve no
+# maximo apos esse tempo: quem ja respondeu entra com a foto, quem nao
+# respondeu ainda entra sem foto (fallback de iniciais no frontend) mas a
+# tarefa continua rodando em background so pra aquecer o cache pra proxima
+# chamada — nunca cancelada, so nao bloqueia esta resposta.
+_FOTOS_BUDGET_SECONDS = 1.5
+
 
 def _new_id() -> str:
     return str(uuid.uuid4())
@@ -25,7 +37,9 @@ async def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: i
     """Foto de perfil NAO fica no banco (mesmo padrao dos projetos de
     referencia Foodapp/Simbora) — busca ao vivo na Evolution, em paralelo
     pra cada sessao da pagina atual, com cache em memoria de 6h dentro do
-    proprio evolution_client (ver fetch_profile_picture_url_cached)."""
+    proprio evolution_client (ver fetch_profile_picture_url_cached). Ver
+    _FOTOS_BUDGET_SECONDS acima pra por que isso e limitado por tempo em vez
+    de so um asyncio.gather direto."""
     sessions = (
         db.query(ChatSession)
         .filter(ChatSession.tenant_id == tenant_id)
@@ -47,7 +61,23 @@ async def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: i
             return None
         return await evolution_client.fetch_profile_picture_url_cached(connection.instance_name, session.phone)
 
-    fotos = await asyncio.gather(*(_foto(s) for s in sessions))
+    foto_tasks = [asyncio.ensure_future(_foto(s)) for s in sessions]
+    done, pending = await asyncio.wait(foto_tasks, timeout=_FOTOS_BUDGET_SECONDS)
+    if pending:
+        logger.info(
+            f"GET /sessoes: {len(pending)} busca(s) de foto ainda em andamento apos "
+            f"{_FOTOS_BUDGET_SECONDS}s, devolvendo sem foto (cache aquece em background)"
+        )
+
+    def _resultado(task: "asyncio.Future[str | None]") -> str | None:
+        if task not in done:
+            return None
+        try:
+            return task.result()
+        except Exception:
+            return None
+
+    fotos = [_resultado(t) for t in foto_tasks]
 
     return [
         {
