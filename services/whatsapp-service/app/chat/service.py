@@ -145,6 +145,13 @@ def process_webhook_message(
     if role not in ("user", "attendant"):
         role = "user"
 
+    # pushName no payload da Evolution e o nome de quem enviou a mensagem —
+    # numa mensagem "attendant" (fromMe=true) isso e o nome do proprio
+    # dispositivo conectado, nao do contato. So confia nisso pra preencher
+    # contact_name quando quem mandou foi o cliente.
+    if role != "user":
+        contact_name = None
+
     existing = db.query(Message).filter(Message.evolution_message_id == evolution_message_id).first()
     if existing:
         logger.info(f"Mensagem duplicada ignorada: evolution_message_id={evolution_message_id}")
@@ -225,6 +232,19 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
             except Exception:
                 logger.exception(f"Falha ao importar mensagens do chat {remote_jid}")
                 continue
+
+            if not session.contact_name:
+                # findChats normalmente NAO devolve pushName/name (isso vem
+                # nos registros de mensagem, nao no chat) — sem isso o nome
+                # do contato nunca era preenchido na importacao e a lista
+                # ficava so com numero de telefone. Usa o pushName da
+                # primeira mensagem recebida do proprio contato (fromMe=false)
+                # como fallback.
+                for raw in messages:
+                    raw_fields = evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
+                    if raw_fields["role"] == "user" and raw_fields["contact_name"]:
+                        session.contact_name = raw_fields["contact_name"]
+                        break
 
             new_in_chat = 0
             for raw in messages:

@@ -67,9 +67,11 @@ export default function AtendimentosPage() {
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [mobileShowThread, setMobileShowThread] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const pertoDoFundoRef = useRef(true);
 
   async function refreshSessoes() {
@@ -166,6 +168,7 @@ export default function AtendimentosPage() {
       setError(e instanceof ApiError ? e.message : "Erro ao enviar resposta.");
     } finally {
       setSending(false);
+      inputRef.current?.focus();
     }
   }
 
@@ -192,8 +195,14 @@ export default function AtendimentosPage() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Lista de conversas — coluna fixa, com scroll proprio */}
-        <div className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-border-light bg-card-bg">
+        {/* Lista de conversas — coluna fixa, com scroll proprio. Em telas
+            pequenas ocupa a tela toda e some quando uma conversa e aberta
+            (padrao mobile do WhatsApp: uma coluna por vez). */}
+        <div
+          className={`flex w-full shrink-0 flex-col overflow-hidden border-r border-border-light bg-card-bg sm:w-72 ${
+            mobileShowThread ? "hidden sm:flex" : "flex"
+          }`}
+        >
           <div className="shrink-0 border-b border-border-light px-4 py-3">
             <BackLink href="/dashboard">← Dashboard</BackLink>
             <h1 className="mt-1 font-heading text-lg font-bold text-text-dark">Atendimentos</h1>
@@ -207,18 +216,21 @@ export default function AtendimentosPage() {
                 {sessoes.map((s) => (
                   <li key={s.id}>
                     <button
-                      onClick={() => setSelected(s.id)}
+                      onClick={() => {
+                        setSelected(s.id);
+                        setMobileShowThread(true);
+                      }}
                       className={`flex w-full items-center gap-3 border-b border-border-light px-4 py-3 text-left text-sm hover:bg-page-bg ${
                         selected === s.id ? "bg-page-bg" : ""
                       }`}
                     >
-                      <Avatar name={s.contact_name || s.phone} photoUrl={s.foto_url} size={36} />
+                      <Avatar name={s.contact_name || s.phone} photoUrl={s.foto_url} size={40} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-text-dark">{s.contact_name || s.phone}</p>
-                        <p className="truncate text-text-muted">{s.phone}</p>
+                        {s.contact_name && <p className="truncate text-xs text-text-muted">{s.phone}</p>}
                         {!s.is_open && <p className="text-xs text-text-muted">Encerrado</p>}
                       </div>
-                      <span className="shrink-0 self-start text-xs text-text-muted">
+                      <span className="shrink-0 self-start whitespace-nowrap text-xs text-text-muted">
                         {formatListaHorario(s.last_activity)}
                       </span>
                     </button>
@@ -230,30 +242,47 @@ export default function AtendimentosPage() {
         </div>
 
         {/* Thread — coluna flexivel: header e campo de envio fixos, so as
-            mensagens rolam. */}
-        <div className="flex flex-1 flex-col overflow-hidden bg-page-bg">
+            mensagens rolam. Em telas pequenas so aparece depois que uma
+            conversa e selecionada (ver mobileShowThread acima). */}
+        <div
+          className={`flex-1 flex-col overflow-hidden bg-page-bg ${
+            mobileShowThread ? "flex" : "hidden sm:flex"
+          }`}
+        >
           {!selectedSessao ? (
             <div className="flex flex-1 items-center justify-center text-sm text-text-muted">
               Selecione uma conversa.
             </div>
           ) : (
             <>
-              <div className="flex shrink-0 items-center justify-between border-b border-border-light bg-card-bg px-4 py-3">
-                <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border-light bg-card-bg px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <button
+                    onClick={() => setMobileShowThread(false)}
+                    className="shrink-0 text-text-muted hover:text-text-dark sm:hidden"
+                    aria-label="Voltar para a lista"
+                  >
+                    ←
+                  </button>
                   <Avatar
                     name={selectedSessao.contact_name || selectedSessao.phone}
                     photoUrl={selectedSessao.foto_url}
-                    size={36}
+                    size={40}
                   />
-                  <div>
-                    <p className="font-medium text-text-dark">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-text-dark">
                       {selectedSessao.contact_name || selectedSessao.phone}
                     </p>
-                    <p className="text-xs text-text-muted">{selectedSessao.phone}</p>
+                    {selectedSessao.contact_name && (
+                      <p className="truncate text-xs text-text-muted">{selectedSessao.phone}</p>
+                    )}
                   </div>
                 </div>
                 {selectedSessao.is_open && (
-                  <button onClick={handleEncerrar} className="text-sm text-red-600 hover:underline">
+                  <button
+                    onClick={handleEncerrar}
+                    className="shrink-0 text-sm text-red-600 hover:underline"
+                  >
                     Encerrar atendimento
                   </button>
                 )}
@@ -262,7 +291,7 @@ export default function AtendimentosPage() {
               <div
                 ref={threadRef}
                 onScroll={handleScrollThread}
-                className="flex-1 space-y-2 overflow-y-auto p-4"
+                className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden p-3 sm:p-4"
               >
                 {mensagens.map((m, i) => {
                   const anterior = mensagens[i - 1];
@@ -280,7 +309,7 @@ export default function AtendimentosPage() {
                         </div>
                       )}
                       <div
-                        className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed sm:max-w-[70%] ${
                           m.role === "attendant"
                             ? "ml-auto bg-accent-blue text-white"
                             : "bg-card-bg text-text-dark"
@@ -301,19 +330,20 @@ export default function AtendimentosPage() {
                 <div ref={endRef} />
               </div>
 
-              <div className="flex shrink-0 gap-2 border-t border-border-light bg-card-bg p-3">
+              <div className="flex shrink-0 gap-2 border-t border-border-light bg-card-bg p-2.5 sm:p-3">
                 <input
+                  ref={inputRef}
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
                   disabled={!selectedSessao.is_open}
                   placeholder={selectedSessao.is_open ? "Digite uma resposta..." : "Atendimento encerrado"}
-                  className="flex-1 rounded-lg border border-border-light bg-page-bg px-3 py-2 text-text-dark outline-none focus:border-accent-blue disabled:opacity-60"
+                  className="min-w-0 flex-1 rounded-lg border border-border-light bg-page-bg px-3 py-2 text-sm text-text-dark outline-none focus:border-accent-blue disabled:opacity-60"
                 />
                 <button
                   onClick={handleSend}
                   disabled={sending || !selectedSessao.is_open || !content.trim()}
-                  className="rounded-lg bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                  className="shrink-0 rounded-lg bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
                 >
                   Enviar
                 </button>
