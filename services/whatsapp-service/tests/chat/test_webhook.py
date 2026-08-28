@@ -81,6 +81,52 @@ def test_webhook_marks_from_me_as_attendant(client, db):
     assert message.role == "attendant"
 
 
+def test_webhook_triggers_ai_autoresponse(client, db, monkeypatch):
+    """Mensagem de cliente deve disparar autoresponder(): consulta o
+    ai-service (mockado aqui) e, se vier resposta, envia via Evolution
+    (tambem mockada) e grava como mensagem do atendente."""
+    import app.chat.service as chat_service
+
+    conn = _make_connection(db)
+
+    async def fake_get_ai_reply(tenant_id, history, user_message):
+        assert tenant_id == conn.tenant_id
+        assert user_message == "oi"
+        return "Ola! Como posso ajudar?"
+
+    sent = {}
+
+    async def fake_send_message(instance_name, phone, content):
+        sent["instance_name"] = instance_name
+        sent["phone"] = phone
+        sent["content"] = content
+
+    monkeypatch.setattr(chat_service.ai_client, "get_ai_reply", fake_get_ai_reply)
+    monkeypatch.setattr(chat_service.evolution_client, "send_message", fake_send_message)
+
+    resp = client.post(
+        "/webhook/evolution",
+        json=_payload(conn.instance_name, "msg-ai-1"),
+        headers={"X-Webhook-Secret": "test-webhook-secret"},
+    )
+    assert resp.status_code == 200
+
+    assert sent == {
+        "instance_name": conn.instance_name,
+        "phone": "5511999999999",
+        "content": "Ola! Como posso ajudar?",
+    }
+
+    session = db.query(ChatSession).filter(ChatSession.id == f"{conn.tenant_id}:5511999999999").first()
+    ai_message = (
+        db.query(Message)
+        .filter(Message.session_id == session.id, Message.role == "attendant")
+        .first()
+    )
+    assert ai_message is not None
+    assert ai_message.content == "Ola! Como posso ajudar?"
+
+
 def test_webhook_unknown_instance_returns_404(client, db):
     resp = client.post(
         "/webhook/evolution",

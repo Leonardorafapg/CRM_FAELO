@@ -76,4 +76,18 @@ async def evolution_webhook(
             "message": MessageOut.model_validate(message).model_dump(mode="json"),
         })
 
+        # So a mensagem do CLIENTE dispara resposta automatica — mensagem
+        # "attendant" tanto pode ser o proprio humano respondendo quanto o
+        # eco da mensagem que a IA acabou de mandar (ver autoresponder),
+        # nunca deve retrigger.
+        if message.role == "user":
+            session = service.get_session_or_404(message.session_id, connection.tenant_id, db)
+            ai_message = await service.autoresponder(session, connection, message, db)
+            if ai_message:
+                await broadcast(connection.tenant_id, {
+                    "type": "message",
+                    "session_id": ai_message.session_id,
+                    "message": MessageOut.model_validate(ai_message).model_dump(mode="json"),
+                })
+
     return {"ok": True}

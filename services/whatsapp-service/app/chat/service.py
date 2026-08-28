@@ -2,12 +2,14 @@
 tenant_id vindo do JWT, exceto o webhook (autenticado por secret, resolve o
 tenant via Connection.instance_name)."""
 import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session as DbSession
 
+from app import ai_client
 from app.chat.models import Session as ChatSession, Message
 from app.connections.models import Connection
 from app.connections.service import get_connection_or_404
@@ -231,6 +233,47 @@ async def responder(session_id: str, tenant_id: str, content: str, db: DbSession
     return message
 
 
+async def autoresponder(session: ChatSession, connection: Connection, message: Message, db: DbSession) -> Message | None:
+    """Chamado pelo webhook logo apos gravar uma mensagem de cliente.
+    Consulta o ai-service (que decide, via faq_enabled do tenant, se deve
+    responder) e, se vier uma resposta, envia via Evolution e grava como
+    mensagem do atendente — mesmo caminho de `responder()`, so que
+    disparado automaticamente em vez de por um humano. Se o ai-service nao
+    responder (desligado, sem chave, fora do ar), nao faz nada: o
+    atendimento segue manual por humano, como hoje."""
+    history_rows = (
+        db.query(Message)
+        .filter(Message.session_id == session.id, Message.id != message.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    history = [
+        {"role": "assistant" if m.role == "attendant" else "user", "content": m.content}
+        for m in reversed(history_rows)
+    ]
+
+    reply = await ai_client.get_ai_reply(connection.tenant_id, history, message.content)
+    if not reply:
+        return None
+
+    return await responder(session.id, connection.tenant_id, reply, db)
+
+
+# Orcamento total pro loop de chats dentro de import_history. Cada chat
+# processado faz pelo menos 1 chamada a Evolution (find_messages, ate 5
+# paginas — ver find_messages), entao uma conta com muito historico podia
+# fazer isso somar bem mais que os 5s de timeout de uma unica chamada
+# (_ENRICHMENT_TIMEOUT), levando GET /connections a estourar timeout no
+# gateway (visto em producao: p95/p99 de 15s e uma onda de 5xx). Com esse
+# orcamento, o loop para de processar NOVOS chats apos esse tempo (o que ja
+# foi processado ate ali e commitado normalmente) — o resto continua na
+# proxima chamada de GET /connections (respeitando o cooldown de resync em
+# connections/service.py), mesmo espirito do _FOTOS_BUDGET_SECONDS em
+# list_sessoes.
+_IMPORT_HISTORY_BUDGET_SECONDS = 8.0
+
+
 async def import_history(connection: Connection, db: DbSession, chats_limit: int = 200, messages_per_chat: int = 100) -> None:
     """Puxa as conversas e mensagens que ja existiam no WhatsApp antes de
     conectar — sem isso, o inbox comeca vazio mesmo que o numero ja tivesse
@@ -254,8 +297,18 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
         contacts_map = {}
 
     imported_messages = 0
+    started_at = time.monotonic()
+    chats_processed = 0
     try:
         for chat in chats[:chats_limit]:
+            if time.monotonic() - started_at > _IMPORT_HISTORY_BUDGET_SECONDS:
+                logger.info(
+                    f"import_history: orcamento de {_IMPORT_HISTORY_BUDGET_SECONDS}s esgotado apos "
+                    f"{chats_processed}/{len(chats)} chats da instancia {connection.instance_name} — "
+                    f"resto continua no proximo resync"
+                )
+                break
+
             remote_jid = chat.get("remoteJid") or chat.get("id") or ""
             if not remote_jid or remote_jid.endswith("@g.us"):
                 continue  # grupos ficam de fora nesta fase — so conversas 1:1, mesmo escopo do resto do atendimento
@@ -314,6 +367,7 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
             if new_in_chat > 0:
                 session.last_activity = datetime.now(timezone.utc)
             imported_messages += new_in_chat
+            chats_processed += 1
 
         db.commit()
     except Exception:
