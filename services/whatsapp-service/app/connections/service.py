@@ -6,6 +6,7 @@ import time
 import uuid
 
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session as DbSession
 
 from app.connections.models import Connection
@@ -43,8 +44,17 @@ async def list_connections(tenant_id: str, db: DbSession) -> list[Connection]:
     maximo 1x a cada _RESYNC_COOLDOWN_SECONDS, ver acima) — sem isso o
     usuario so pegava o historico uma vez, na transicao inicial pra
     "connected", e ficava sem jeito de puxar mensagens novas trocadas fora
-    do app (ex.: direto no celular) sem excluir e recriar a conexao."""
-    connections = db.query(Connection).filter(Connection.tenant_id == tenant_id).order_by(Connection.created_at).all()
+    do app (ex.: direto no celular) sem excluir e recriar a conexao.
+
+    Consultas ao banco rodam via run_in_threadpool: db.query/commit/refresh
+    sao chamadas SINCRONAS (driver psycopg2) — sem isso, cada uma bloqueava
+    a unica thread do event loop, travando TODAS as outras requisicoes
+    concorrentes deste processo (inclusive o healthcheck) enquanto essa
+    rodava, o que e o suspeito mais provavel do crash-loop em producao
+    (Railway achando o processo travado e reiniciando)."""
+    connections = await run_in_threadpool(
+        lambda: db.query(Connection).filter(Connection.tenant_id == tenant_id).order_by(Connection.created_at).all()
+    )
     for connection in connections:
         if connection.status == "connected":
             last = _last_resync.get(connection.id, 0.0)
@@ -79,8 +89,8 @@ async def _refresh_status_from_evolution(connection: Connection, db: DbSession) 
         connection.status = "disconnected"
     # qualquer outro valor (ex.: "connecting") mantem o status atual
 
-    db.commit()
-    db.refresh(connection)
+    await run_in_threadpool(db.commit)
+    await run_in_threadpool(db.refresh, connection)
 
     if just_connected:
         # Import local pra evitar ciclo: app.chat.service ja importa

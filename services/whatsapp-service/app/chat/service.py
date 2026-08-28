@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session as DbSession
 
 from app import ai_client
@@ -48,21 +49,27 @@ async def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: i
     pra cada sessao da pagina atual, com cache em memoria de 6h dentro do
     proprio evolution_client (ver fetch_profile_picture_url_cached). Ver
     _FOTOS_BUDGET_SECONDS acima pra por que isso e limitado por tempo em vez
-    de so um asyncio.gather direto."""
-    sessions = (
-        db.query(ChatSession)
-        .filter(ChatSession.tenant_id == tenant_id)
-        .order_by(ChatSession.last_activity.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
+    de so um asyncio.gather direto. As duas queries rodam via run_in_threadpool
+    pelo mesmo motivo do connections/service.py::list_connections — sao
+    chamadas sincronas (driver psycopg2) que, sem isso, bloqueariam a
+    thread unica do event loop e travariam todas as outras requisicoes
+    concorrentes deste processo."""
+    sessions = await run_in_threadpool(
+        lambda: (
+            db.query(ChatSession)
+            .filter(ChatSession.tenant_id == tenant_id)
+            .order_by(ChatSession.last_activity.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
     )
     if not sessions:
         return []
 
-    connections = {
-        c.id: c for c in db.query(Connection).filter(Connection.tenant_id == tenant_id).all()
-    }
+    connections = await run_in_threadpool(
+        lambda: {c.id: c for c in db.query(Connection).filter(Connection.tenant_id == tenant_id).all()}
+    )
 
     async def _foto(session: ChatSession) -> str | None:
         connection = connections.get(session.connection_id)
@@ -340,8 +347,14 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
             # quase sempre fica None; mantido so como fallback caso alguma
             # versao da Evolution devolva.
             contact_name = contacts_map.get(phone) or chat.get("pushName") or chat.get("name")
-            session = _get_or_create_session_quiet(connection.tenant_id, connection.id, phone, contact_name, db)
-            db.flush()  # garante id da Session persistido antes do insert de Message com FK
+            # _get_or_create_session_quiet e db.flush sao sincronos (driver
+            # psycopg2) — rodam via run_in_threadpool pra nao bloquear a
+            # thread unica do event loop (ver docstring do modulo/list_sessoes
+            # pro mesmo motivo).
+            session = await run_in_threadpool(
+                _get_or_create_session_quiet, connection.tenant_id, connection.id, phone, contact_name, db
+            )
+            await run_in_threadpool(db.flush)  # garante id da Session persistido antes do insert de Message com FK
 
             try:
                 messages = await evolution_client.find_messages(connection.instance_name, remote_jid, limit=messages_per_chat)
@@ -362,15 +375,38 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
                         session.contact_name = raw_fields["contact_name"]
                         break
 
+            all_fields = [
+                evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
+                for raw in messages
+            ]
+            # nao e mensagem de verdade (ex.: evento sem key.id) — content
+            # nunca fica vazio quando message_id existe (ver
+            # extract_message_fields), entao so isso ja cobre "descartar
+            # mensagem de midia" que existia aqui antes
+            all_fields = [f for f in all_fields if f["message_id"]]
+
+            # 1 query em lote pro chat inteiro em vez de 1 query por
+            # mensagem (ate 100 por chat) — bem mais rapido e, como cada
+            # query roda via run_in_threadpool (chamada sincrona, ver
+            # motivo acima), evita tambem uma ida-e-volta a threadpool por
+            # mensagem.
+            message_ids = [f["message_id"] for f in all_fields]
+            existing_ids: set[str] = set()
+            if message_ids:
+                existing_ids = set(
+                    await run_in_threadpool(
+                        lambda ids=message_ids: [
+                            row[0]
+                            for row in db.query(Message.evolution_message_id)
+                            .filter(Message.evolution_message_id.in_(ids))
+                            .all()
+                        ]
+                    )
+                )
+
             new_in_chat = 0
-            for raw in messages:
-                fields = evolution_client.extract_message_fields(raw if isinstance(raw, dict) else {})
-                if not fields["message_id"]:
-                    continue  # nao e uma mensagem de verdade (ex.: evento sem key.id) — content nunca fica
-                              # vazio quando message_id existe (ver extract_message_fields), entao so isso
-                              # ja cobre "descartar mensagem de midia" que existia aqui antes
-                existing = db.query(Message).filter(Message.evolution_message_id == fields["message_id"]).first()
-                if existing:
+            for fields in all_fields:
+                if fields["message_id"] in existing_ids:
                     continue
                 db.add(Message(
                     id=_new_id(),
@@ -389,13 +425,13 @@ async def import_history(connection: Connection, db: DbSession, chats_limit: int
             imported_messages += new_in_chat
             chats_processed += 1
 
-        db.commit()
+        await run_in_threadpool(db.commit)
     except Exception:
         # Erro de banco (conexao caiu, etc.) durante o import nao pode
         # derrubar o GET /connections inteiro — reflete o mesmo "best-effort"
         # ja documentado acima, que ate aqui so cobria as chamadas a
         # Evolution, nao a escrita no banco.
-        db.rollback()
+        await run_in_threadpool(db.rollback)
         logger.exception(f"Falha ao persistir historico importado da instancia {connection.instance_name}")
         return
 
