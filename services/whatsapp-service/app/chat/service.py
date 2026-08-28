@@ -30,6 +30,13 @@ logger = get_logger("whatsapp-service")
 # chamada — nunca cancelada, so nao bloqueia esta resposta.
 _FOTOS_BUDGET_SECONDS = 1.5
 
+# Limite de chamadas concorrentes a Evolution dentro de uma unica listagem —
+# ver uso em list_sessoes/_foto. Evita que uma listagem sozinha (ate 50
+# sessoes) monopolize o pool HTTP compartilhado (shared/http_client.py,
+# capado em 50 conexoes) e atrase chamadas de outros endpoints do mesmo
+# processo (webhook, envio de mensagem) que competem pelo mesmo client.
+_FOTOS_CONCURRENCY = asyncio.Semaphore(10)
+
 
 def _new_id() -> str:
     return str(uuid.uuid4())
@@ -61,7 +68,13 @@ async def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: i
         connection = connections.get(session.connection_id)
         if not connection:
             return None
-        return await evolution_client.fetch_profile_picture_url_cached(connection.instance_name, session.phone)
+        # Semaforo: sem isso, uma unica listagem com muitas sessoes de
+        # cache frio podia abrir ate 50 conexoes simultaneas contra a
+        # Evolution — o teto inteiro do pool HTTP compartilhado
+        # (shared/http_client.py), disputando com outras chamadas
+        # concorrentes (send_message, webhook) que usam o mesmo client.
+        async with _FOTOS_CONCURRENCY:
+            return await evolution_client.fetch_profile_picture_url_cached(connection.instance_name, session.phone)
 
     foto_tasks = [asyncio.ensure_future(_foto(s)) for s in sessions]
     done, pending = await asyncio.wait(foto_tasks, timeout=_FOTOS_BUDGET_SECONDS)
@@ -70,6 +83,13 @@ async def list_sessoes(tenant_id: str, db: DbSession, limit: int = 50, offset: i
             f"GET /sessoes: {len(pending)} busca(s) de foto ainda em andamento apos "
             f"{_FOTOS_BUDGET_SECONDS}s, devolvendo sem foto (cache aquece em background)"
         )
+        # As pendentes continuam rodando pra aquecer o cache (ver docstring),
+        # mas ninguem mais vai dar await nelas — sem isso, uma excecao aqui
+        # vira warning barulhento de "Task exception was never retrieved"
+        # nos logs sem afetar nada de fato (ja tratado como best-effort
+        # dentro de fetch_profile_picture_url).
+        for task in pending:
+            task.add_done_callback(lambda t: t.exception())
 
     def _resultado(task: "asyncio.Future[str | None]") -> str | None:
         if task not in done:
